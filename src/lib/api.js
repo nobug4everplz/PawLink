@@ -61,8 +61,9 @@ export async function updateTnrStage(animalId, stage) {
   if (error) throw error
 }
 export async function uploadAnimalPhoto(animalId, blob) {
-  const path = `${animalId}/${crypto.randomUUID()}.webp`
-  const up = await need().storage.from('animal-photos').upload(path, blob, { contentType: 'image/webp' })
+  const ext = blob.type === 'image/jpeg' ? 'jpg' : 'webp'
+  const path = `${animalId}/${crypto.randomUUID()}.${ext}`
+  const up = await need().storage.from('animal-photos').upload(path, blob, { contentType: blob.type })
   if (up.error) throw up.error
   const { error } = await need().from('animal_photos').insert({ animal_id: animalId, storage_path: path })
   if (error) throw error
