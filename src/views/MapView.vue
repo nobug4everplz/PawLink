@@ -1,49 +1,42 @@
 <script setup>
-import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onMounted, onBeforeUnmount, ref } from 'vue'
 import L from 'leaflet'
 import 'leaflet.markercluster'
 import { showToast } from 'vant'
-import { auth, signOut } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
-import { subscribeFeeding } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
-import SpotPanel from '../components/SpotPanel.vue'
 
-const route = useRoute(), router = useRouter()
 const mapEl = ref(null)
-const selectedId = ref(null)
+const selected = ref(null)
 const showPanel = ref(false)
-const refreshKey = ref(0)
-let map, cluster, meMarker, timer, unsub
-let spots = []
+let map, cluster, meMarker, timer
+
+const FOOT = { fresh: '剛餵過', recent: '一陣子前', hungry: '久未餵食' }
 
 async function loadSpots() {
   try {
-    spots = await fetchMapSpots(map.getBounds())
+    const spots = await fetchMapSpots(map.getBounds())
     cluster.clearLayers()
     for (const s of spots) {
       const m = L.marker([s.lat, s.lng], { icon: footprintIcon(s.footprint) })
-      m.on('click', () => select(s.id))
+      m.on('click', () => { selected.value = s; showPanel.value = true })
       cluster.addLayer(m)
     }
-  } catch (e) { showToast('載入餵食點失敗：' + e.message) }
+  } catch (e) {
+    showToast('載入餵食點失敗：' + e.message)
+  }
 }
-function select(id) { selectedId.value = id; showPanel.value = true }
-function onChanged() { loadSpots() }
 
-function locate() { map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true }) }
-
-function addSpotAt(latlng) {
-  if (!auth.user) return router.push({ name: 'login', query: { redirect: '/' } })
-  router.push({ name: 'spot-new', query: { lat: latlng.lat, lng: latlng.lng } })
+function locate() {
+  map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true })
 }
-/** 以 GPS 位置新增：沒有定位就用地圖中心 */
-function addHere() { addSpotAt(meMarker ? meMarker.getLatLng() : map.getCenter()) }
 
 onMounted(() => {
   map = L.map(mapEl.value, { zoomControl: false }).setView([25.0174, 121.5398], 15)
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map)
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap contributors',
+  }).addTo(map)
   cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 50 })
   map.addLayer(cluster)
 
@@ -53,33 +46,23 @@ onMounted(() => {
   })
   map.on('locationerror', () => showToast('無法取得定位，請確認已允許位置權限（需 HTTPS）'))
   map.on('moveend', () => { clearTimeout(timer); timer = setTimeout(loadSpots, 300) })
-  // 長按（右鍵 / 手機長按）選點建檔
-  map.on('contextmenu', (e) => addSpotAt(e.latlng))
-
-  loadSpots().then(() => {
-    const id = route.query.spot
-    const s = spots.find((x) => x.id === id)
-    if (s) { map.setView([s.lat, s.lng], 17); select(id) }
-  })
-  unsub = subscribeFeeding(() => { loadSpots(); refreshKey.value++ })
+  loadSpots()
 })
-onBeforeUnmount(() => { unsub?.(); map?.remove() })
-watch(() => auth.user?.id, () => { if (map) loadSpots() })
+onBeforeUnmount(() => map?.remove())
 </script>
 
 <template>
   <div class="page">
     <div ref="mapEl" class="map" />
-    <div class="top">
-      <van-button v-if="!auth.user" size="small" round type="primary" @click="router.push('/login')">登入</van-button>
-      <van-button v-else size="small" round plain @click="signOut">{{ auth.profile?.display_name || '已登入' }}・登出</van-button>
-    </div>
-    <div class="fabs">
-      <van-button round icon="aim" type="primary" class="fab" @click="locate" />
-      <van-button round icon="plus" type="success" class="fab" @click="addHere" />
-    </div>
+    <van-button class="locate" round icon="aim" type="primary" @click="locate" />
     <van-popup v-model:show="showPanel" position="bottom" round :overlay="false" class="panel">
-      <SpotPanel :spot-id="selectedId" :refresh-key="refreshKey" @changed="onChanged" />
+      <div v-if="selected" class="info">
+        <h3>{{ selected.name }}</h3>
+        <p>狀態：{{ FOOT[selected.footprint] }}</p>
+        <p>動物 {{ selected.animal_count }} 隻・已結紮 {{ selected.sterilized_count }} 隻</p>
+        <p>30 日清理率：{{ selected.clean_rate_30d == null ? '尚無資料' : Math.round(selected.clean_rate_30d * 100) + '%' }}</p>
+        <p v-if="selected.is_fuzzed" class="hint">訪客僅顯示大約位置，登入後可看精確位置</p>
+      </div>
     </van-popup>
   </div>
 </template>
@@ -87,7 +70,9 @@ watch(() => auth.user?.id, () => { if (map) loadSpots() })
 <style scoped>
 .page { position: relative; height: 100%; }
 .map { height: 100%; }
-.top { position: absolute; top: 12px; right: 12px; z-index: 1000; background: #fff; border-radius: 16px; }
-.fabs { position: absolute; right: 16px; bottom: 32px; z-index: 1000; display: flex; flex-direction: column; gap: 12px; }
-.fab { width: 48px; height: 48px; }
+.locate { position: absolute; right: 16px; bottom: 32px; z-index: 1000; width: 48px; height: 48px; }
+.info { padding: 16px 20px 28px; }
+.info h3 { margin: 0 0 8px; }
+.info p { margin: 4px 0; color: #444; }
+.hint { color: #999; font-size: 12px; }
 </style>

@@ -1,6 +1,4 @@
-# 權限矩陣（第一階段，2026-11-11 定案）
-
-設計決策（照顧者以餵食點為單位、TNR 五階段等）見 `decisions.md`。
+# 權限矩陣（第一階段，2026-11-11 草稿）
 
 對應 FR-4.1、NFR-1。RLS 實作在 `supabase/migrations/20261111000300_rls_policies.sql`，
 自動測試在 `supabase/tests/10_rls_and_rules.sql`（81 項，四角色逐表驗證）。
