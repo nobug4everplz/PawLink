@@ -216,6 +216,62 @@ if (admin) {
   }
 } else console.log('⚠️  沒有 pawlink-qa-admin 帳號，略過管理員測試（見 docs/acceptance.md）')
 
+// ---------- 階段 2：保育熱區、三層警示、管理員後台 ----------
+{
+  const probe = await guest.rpc('get_conservation_zones')
+  if (probe.error) console.log('⚠️  資料庫還沒套用階段 2 的 migration（20261111000600），略過階段 2 測試：' + probe.error.message)
+  else {
+    // 測試熱區放在外海，約 1km 見方；北邊界緯度 25.32
+    const ZL = 122.215, TOP = 25.32
+    const square = { type: 'Polygon', coordinates: [[[122.21, 25.31], [122.22, 25.31], [122.22, 25.32], [122.21, 25.32], [122.21, 25.31]]] }
+    const bowtie = { type: 'Polygon', coordinates: [[[122.21, 25.31], [122.22, 25.32], [122.22, 25.31], [122.21, 25.32], [122.21, 25.31]]] }
+    const north = (m) => TOP + m / 110800
+    const alert = async (c, lat, lng) => { const r = await c.rpc('check_conservation_alert', { p_lat: lat, p_lng: lng }); return r.data?.[0] }
+    ok('訪客看得到保育熱區清單', Array.isArray(probe.data))
+    ok('訪客不能新增保育熱區', !!(await guest.rpc('save_conservation_zone', { p_name: 'x', p_geojson: square })).error)
+    ok('一般使用者不能新增保育熱區', !!(await user.c.rpc('save_conservation_zone', { p_name: 'x', p_geojson: square })).error)
+    ok('照顧者不能新增保育熱區', !!(await care.c.rpc('save_conservation_zone', { p_name: 'x', p_geojson: square })).error)
+    ok('一般使用者不能看使用者清單（含 Email）', !!(await user.c.rpc('admin_list_users')).error)
+    ok('一般使用者不能用餵食點管理清單', !!(await user.c.rpc('admin_list_spots')).error)
+    ok('一般使用者不能指派 owner', !!(await user.c.rpc('admin_set_spot_owner', { p_spot_id: spotId, p_user_id: user.id })).error)
+    ok('訪客不能查既有餵食點的警示', !!(await guest.rpc('check_spot_conservation_alert', { p_spot_id: spotId })).error)
+    const far = await alert(guest, LAT, LNG)
+    ok('遠離熱區 → none', far?.level === 'none', JSON.stringify(far))
+
+    const isAdm = admin && (await admin.c.from('profiles').select('role').eq('id', admin.id).single()).data?.role === 'admin'
+    if (!isAdm) console.log('⚠️  沒有管理員測試帳號，略過熱區繪製與後台測試')
+    else {
+      await admin.c.from('conservation_zones').delete().like('name', 'QA %') // 清掉上次殘留
+      const bad = await admin.c.rpc('save_conservation_zone', { p_name: 'QA 蝴蝶結', p_geojson: bowtie })
+      ok('自我相交的多邊形被擋下（ST_IsValid）', !!bad.error && /交叉/.test(bad.error.message), msg(bad))
+      const z = await admin.c.rpc('save_conservation_zone', { p_name: 'QA 外海示意區', p_geojson: square, p_species: '石虎' })
+      ok('管理員可新增保育熱區', !z.error && !!z.data, msg(z))
+      const list = await guest.rpc('get_conservation_zones')
+      const mine = list.data?.find((x) => x.id === z.data)
+      ok('熱區清單含範圍與 200 公尺緩衝帶 GeoJSON，預設標為示意', mine?.geojson?.type === 'Polygon' && mine?.buffer_geojson?.type === 'Polygon' && mine?.is_demo === true)
+      const a1 = await alert(user.c, 25.315, ZL), a2 = await alert(user.c, north(150), ZL), a3 = await alert(user.c, north(195), ZL), a4 = await alert(user.c, north(206), ZL)
+      ok('三層警示：範圍內 → red', a1?.level === 'red' && a1.zone_id === z.data, JSON.stringify(a1))
+      ok('三層警示：範圍外 150 公尺 → yellow', a2?.level === 'yellow' && Math.abs(a2.distance_m - 150) < 3, JSON.stringify(a2))
+      ok('三層警示邊界：195 公尺 → yellow', a3?.level === 'yellow', JSON.stringify(a3))
+      ok('三層警示邊界：206 公尺 → none', a4?.level === 'none', JSON.stringify(a4))
+      const sp = await owner.c.rpc('create_feeding_spot', { p_name: 'QA 熱區內的點', p_lat: 25.315, p_lng: ZL })
+      const sa = await owner.c.rpc('check_spot_conservation_alert', { p_spot_id: sp.data })
+      ok('動物建檔檢查：熱區內的餵食點 → red', sa.data?.[0]?.level === 'red', msg(sa))
+      const ls = await admin.c.rpc('admin_list_spots', { p_search: 'QA 熱區內的點' })
+      ok('餵食點管理清單標出熱區內的點', ls.data?.some((x) => x.id === sp.data && x.alert_level === 'red'), msg(ls))
+      await owner.c.from('feeding_spots').update({ status: 'archived' }).eq('id', sp.data)
+      ok('一般使用者不能改保育熱區', denied(await user.c.from('conservation_zones').update({ name: 'hacked' }).eq('id', z.data).select('id')))
+      ok('一般使用者不能刪保育熱區', denied(await user.c.from('conservation_zones').delete().eq('id', z.data).select('id')))
+      const lu = await admin.c.rpc('admin_list_users', { p_search: 'pawlink-qa-user' })
+      ok('管理員可用 Email 搜尋使用者', lu.data?.some((x) => x.id === user.id), msg(lu))
+      ok('管理員可指派 owner', !(await admin.c.rpc('admin_set_spot_owner', { p_spot_id: spotId, p_user_id: care.id })).error)
+      ok('管理員可停用保育熱區，停用後不再警示',
+        allowed(await admin.c.from('conservation_zones').update({ status: 'archived' }).eq('id', z.data).select('id')) && (await alert(user.c, 25.315, ZL))?.level === 'none')
+      ok('管理員可刪除保育熱區', allowed(await admin.c.from('conservation_zones').delete().eq('id', z.data).select('id')))
+    }
+  }
+}
+
 // ---------- 收尾 ----------
 {
   ok('建檔者可刪自己的動物', allowed(await user.c.from('animals').delete().eq('id', animalId).select('id')))

@@ -1,16 +1,24 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast } from 'vant'
-import { createAnimal, uploadAnimalPhoto } from '../lib/api'
+import { showToast, showConfirmDialog } from 'vant'
+import { createAnimal, uploadAnimalPhoto, checkSpotAlert } from '../lib/api'
+import ConservationAlert from '../components/ConservationAlert.vue'
 import { compressImage } from '../lib/image'
 
 const route = useRoute(), router = useRouter()
 const f = ref({ name: '', species: 'cat', sex: 'unknown', coat: '', features: '', ear_tipped: false, tnr_stage: 1 })
-const files = ref([]), busy = ref(false)
+const files = ref([]), busy = ref(false), alert = ref(null)
+onMounted(async () => { alert.value = await checkSpotAlert(route.params.id) })
 const STAGES = ['未結紮', '誘捕中', '已手術', '術後照護', '已原地回置'].map((text, i) => ({ text, value: i + 1 }))
 
 async function submit() {
+  alert.value = (await checkSpotAlert(route.params.id)) || alert.value
+  if (alert.value?.level === 'red' && f.value.tnr_stage < 3) {
+    try {
+      await showConfirmDialog({ title: '這個餵食點在保育熱區內', message: `「${f.value.name}」還沒結紮，又在保育熱區「${alert.value.zone_name}」範圍內活動，請優先安排結紮。要繼續建檔嗎？`, confirmButtonText: '繼續建檔' })
+    } catch { return }
+  }
   busy.value = true
   try {
     const fields = { ...f.value, coat: f.value.coat || null, features: f.value.features || null }
@@ -26,6 +34,7 @@ async function submit() {
 
 <template>
   <van-nav-bar title="新增動物" left-arrow @click-left="router.back()" />
+  <ConservationAlert :alert="alert" context="animal" />
   <van-form @submit="submit">
     <van-cell-group inset style="margin-top:12px">
       <van-field v-model="f.name" label="名字" maxlength="30" :rules="[{ required: true, message: '請輸入名字' }]" />

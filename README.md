@@ -14,6 +14,7 @@ npm run dev
 - `src/views` 頁面、`src/components` 元件、`src/lib` Supabase 與資料存取
 - `supabase/migrations` 資料庫變更（唯一來源）、`supabase/tests` RLS 測試
 - `docs/` 權限矩陣與 RPC 介面（前端以此為準）、`docs/acceptance.md` 驗收紀錄
+- 階段 2：`/admin` 管理後台（角色、保育熱區繪製、餵食點管理）、`/conservation` 保育宣導頁；宣導文案與連結在 `src/lib/conservationContent.js`
 - `scripts/acceptance.mjs` 對真實 Supabase 的四角色權限驗收（`npm run test:acceptance`）
 - `.github/workflows/keepalive.yml` 每天喚醒 Supabase，避免免費專案 7 天沒活動被暫停
 

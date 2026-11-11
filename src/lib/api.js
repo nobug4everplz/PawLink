@@ -90,3 +90,56 @@ export function subscribeFeeding(onChange) {
     .subscribe()
   return () => supabase.removeChannel(ch)
 }
+
+// ---------- 階段 2：保育熱區與三層警示 ----------
+// 讀取類的呼叫失敗時（例如資料庫還沒套用階段 2 的 migration）一律當成「沒有熱區」，不影響原有流程
+
+/** 使用中的保育熱區（含 200 公尺緩衝帶 GeoJSON） */
+export async function getZones() {
+  if (!supabase) return []
+  try { return await rpc('get_conservation_zones') } catch (e) { console.warn('保育熱區載入失敗', e); return [] }
+}
+/** 座標的警示：{ level: 'red' | 'yellow' | 'none', zone_name, species, distance_m, is_demo }，查不到回 null */
+export async function checkAlert(lat, lng) {
+  if (!supabase) return null
+  try { return (await rpc('check_conservation_alert', { p_lat: lat, p_lng: lng }))?.[0] ?? null }
+  catch (e) { console.warn('保育警示檢查失敗', e); return null }
+}
+/** 既有餵食點的警示（需登入） */
+export async function checkSpotAlert(spotId) {
+  if (!supabase) return null
+  try { return (await rpc('check_spot_conservation_alert', { p_spot_id: spotId }))?.[0] ?? null }
+  catch (e) { console.warn('保育警示檢查失敗', e); return null }
+}
+export const saveZone = (z) => rpc('save_conservation_zone', {
+  p_name: z.name, p_geojson: z.geojson, p_species: z.species || null,
+  p_description: z.description || null, p_is_demo: z.is_demo, p_id: z.id || null,
+})
+export async function deleteZone(id) {
+  const { data, error } = await need().from('conservation_zones').delete().eq('id', id).select('id')
+  if (error) throw error
+  if (!data.length) throw new Error('只有管理員可以刪除保育熱區')
+}
+
+// ---------- 階段 2：管理員後台 ----------
+export const adminListUsers = (search) => rpc('admin_list_users', { p_search: search || null })
+export const setUserRole = (userId, role) => rpc('set_user_role', { p_user_id: userId, p_role: role })
+export const adminListSpots = (search) => rpc('admin_list_spots', { p_search: search || null })
+export const adminSetSpotOwner = (spotId, userId) => rpc('admin_set_spot_owner', { p_spot_id: spotId, p_user_id: userId })
+export async function setSpotStatus(spotId, status) {
+  const { data, error } = await need().from('feeding_spots').update({ status }).eq('id', spotId).select('id')
+  if (error) throw error
+  if (!data.length) throw new Error('沒有權限修改這個餵食點')
+}
+/** 管理員：全部熱區（含停用），不含範圍幾何 */
+export async function adminListZones() {
+  const { data, error } = await need().from('conservation_zones')
+    .select('id,name,species,description,is_demo,status,updated_at').order('status').order('name')
+  if (error) throw error
+  return data
+}
+export async function setZoneStatus(id, status) {
+  const { data, error } = await need().from('conservation_zones').update({ status }).eq('id', id).select('id')
+  if (error) throw error
+  if (!data.length) throw new Error('只有管理員可以修改保育熱區')
+}
