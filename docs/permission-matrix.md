@@ -1,4 +1,4 @@
-# 權限矩陣（第一～三階段與哨兵，2026-11-11 定案）
+# 權限矩陣（第一～三階段、哨兵、輪值，2026-11-11 定案）
 
 設計決策（照顧者以餵食點為單位、TNR 五階段等）見 `decisions.md`。
 
@@ -68,7 +68,13 @@
 | | 新增 | ❌ | ❌（由 `report_sighting` 與每日排程產生） | ❌ | 🔒 `admin_run_sentinel` 手動執行檢查 |
 | | 結案 | ❌ | 🔒 `resolve_animal_alert`（自己建檔的動物） | 🔒 `resolve_animal_alert` | 🔒 `resolve_animal_alert` |
 
-`neighbor_reports.ip_hash` 與 `private.app_secrets`（IP 雜湊的鹽、Turnstile secret）任何前端角色都讀不到。
+| **feeding_shifts**（輪值） | 讀 | ❌ | ❌ | 🟡 自己照顧的點 | ✅ |
+| | 登記 | ❌ | ❌ | 🔒 `create_shift`（同一人同時段只能一班） | 🟡 要是該點照顧者 |
+| | 求代班、取消 | ❌ | ❌ | 🔒 自己排的班 | 🔒 `cancel_shift` 可刪任何一班 |
+| | 認領代班 | ❌ | ❌ | 🔒 `claim_shift`（同點別人的班，第一位成功） | 🟡 要是該點照顧者 |
+| | 標記完成 | ❌ | ❌ | 🔒 `complete_shift`（負責這一班的人） | 🟡 同左 |
+
+`neighbor_reports.ip_hash`、`private.app_secrets`（IP 雜湊的鹽、Turnstile secret）與 `private.sentinel_runs`（哨兵執行紀錄）任何前端角色都讀不到；`private` 裡的表一樣開 RLS 並收回權限。
 
 ## 階段 2 的 RPC 權限
 

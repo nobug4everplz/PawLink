@@ -1,4 +1,4 @@
-# 前端資料介面（第一～三階段與哨兵）
+# 前端資料介面（第一～三階段、哨兵、輪值）
 
 前端用 `supabase-js`。地圖與統計一律走 RPC；其他 CRUD 直接用 `supabase.from('表')`，權限由 RLS 把關。
 
@@ -78,6 +78,20 @@ Turnstile 的設定步驟見 `docs/turnstile-setup.md`。
 
 規則依 M1 決策表 3：門檻 T＝max（3 天，平均出現間隔 × 2）。回報受傷／跛腳／消瘦立即發健康提醒；每天 04:00（pg_cron）檢查，超過 T 沒被看到、期間該點有人餵過、而且這次沒出現還沒提醒過，就發「可能失蹤」提醒。`animals.last_seen_at` 是最後出現時間，訪客也讀得到。
 
+### 階段 5 延伸二：餵食輪值與代班
+
+| 函式 | 誰可呼叫 | 參數 | 回傳 | 用在哪 |
+| --- | --- | --- | --- | --- |
+| `create_shift` | 該點照顧者 | `p_spot_id, p_date, p_slot ('morning'/'evening'), p_note?` | 班次 `uuid` | 登記輪值 |
+| `cancel_shift` | 排班者（還沒被代、還沒完成）、管理員 | `p_shift_id` | 無 | 取消這一班 |
+| `request_shift_cover` | 排班者 | `p_shift_id, p_need?`（`false` 收回） | 無 | 求代班／收回 |
+| `claim_shift` | 該點其他照顧者 | `p_shift_id` | 無 | 我來代班。只有第一位成功，其餘得到「已有人接了」；自己該時段有班會得到「時段衝突」 |
+| `complete_shift` | 負責這一班的人（排班者或代班者） | `p_shift_id` | 無 | 標記完成（當天記錄餵食也會自動完成） |
+| `get_my_shifts` | 登入者 | 無 | `id, spot_id, spot_name, shift_date, time_slot, status, note, user_id, user_name, cover_user_id, cover_name, is_mine, is_my_duty, can_claim` | 輪值表（自己照顧的點，從昨天起） |
+| `get_my_shift_spots` | 登入者 | 無 | `id, name` | 登記輪值時可選的餵食點 |
+
+班次狀態 `status`：`scheduled` 已排班、`need_cover` 求代班、`covered` 已代班、`done` 已完成。日期一律是臺灣時間。
+
 `food_type`：`dry` 乾糧、`wet` 濕食、`mixed` 混合、`other` 其他。
 
 ## 範例
@@ -118,7 +132,7 @@ const url = supabase.storage.from('animal-photos').getPublicUrl(path).data.publi
 ## 本機測試
 
 ```bash
-# 需要 PostgreSQL 15+ 與 PostGIS 3
+# 需要 PostgreSQL 15+ 與 PostGIS 3；輪值的同時認領測試另外用到內建的 dblink 擴充套件
 PGHOST=localhost PGUSER=postgres bash supabase/tests/run_tests.sh
 ```
 

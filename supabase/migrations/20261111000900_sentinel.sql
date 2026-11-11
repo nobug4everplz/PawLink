@@ -102,6 +102,8 @@ create table private.sentinel_runs (
   created int not null,
   source  text not null
 );
+alter table private.sentinel_runs enable row level security;
+revoke all on private.sentinel_runs from public, anon, authenticated;
 
 -- -------------------------------------------------------------
 -- 門檻 T＝max（3 天，平均出現間隔 × 2）
