@@ -1,4 +1,4 @@
-# 權限矩陣（第一～三階段、哨兵、輪值、TNR 接力，2026-11-11 定案）
+# 權限矩陣（第一～三階段、哨兵、輪值、TNR 接力、領養陪伴，2026-11-11 定案）
 
 設計決策（照顧者以餵食點為單位、TNR 五階段等）見 `decisions.md`。
 
@@ -80,6 +80,14 @@
 | **tnr_tasks**（TNR 接力） | 讀 | ❌ | ✅ | ✅ | ✅ |
 | | 認領 | ❌ | 🔒 `claim_tnr_task`（第一位成功） | 🔒 同左 | 🔒 同左 |
 | | 完成、放棄 | ❌ | 🔒 自己認領的任務 | 🔒 同左 | 🔒 同左 |
+| **adoptions**（領養陪伴） | 直接讀寫 | ❌ | ❌ | ❌ | ❌ |
+| | 看領養狀態 | ❌ | 🔒 `get_adoptions`（狀態與領養人暱稱） | 🔒 同左 | 🔒 同左 |
+| | 登記 | ❌ | 🔒 `register_adoption`（待確認；自己建檔的動物直接生效） | 🔒 `register_adoption`（自己照顧的點的動物直接生效） | 🔒 直接生效 |
+| | 確認 | ❌ | 🔒 `confirm_adoption`（自己建檔的動物，且不是領養人本人） | 🔒 `confirm_adoption`（自己照顧的點的動物） | 🔒 `confirm_adoption` |
+| | 取消、退養 | ❌ | 🔒 `cancel_adoption`（領養人、陪伴者、建檔者） | 🔒 `cancel_adoption` | 🔒 `cancel_adoption` |
+| **adoption_followups**（關懷問卷） | 直接讀寫 | ❌ | ❌ | ❌ | ❌ |
+| | 看問卷內容 | ❌ | 🔒 領養人、陪伴者、建檔者 | 🔒 自己照顧的點的動物 | 🔒 |
+| | 填寫 | ❌ | 🔒 `submit_adoption_followup`（領養人本人，到期後） | 🔒 同左 | 🔒 同左 |
 
 `neighbor_reports.ip_hash`、`private.app_secrets`（IP 雜湊的鹽、Turnstile secret）與 `private.sentinel_runs`（哨兵執行紀錄）任何前端角色都讀不到；`private` 裡的表一樣開 RLS 並收回權限。
 

@@ -20,6 +20,7 @@ npm run dev
 - 階段 5 延伸一：失蹤／健康哨兵。身分檔的「回報目擊」、`/reports` 通知頁的「動物提醒」、後台「哨兵」分頁；規則在 `supabase/migrations/20261111000900_sentinel.sql`，每日排程用 pg_cron
 - 階段 5 延伸二：餵食輪值與代班。`/shifts` 輪值表（登記、求代班、我來代班）；規則在 `supabase/migrations/20261111001000_shifts.sql`
 - 階段 5 延伸三：TNR 接力。身分檔的「發起接力」、`/tnr` 接力看板、元件 `src/components/TnrSteps.vue`；規則在 `supabase/migrations/20261111001100_tnr_relay.sql`
+- 階段 5 延伸四：領養陪伴。身分檔的「我領養了牠」、`/adoptions` 領養陪伴頁（確認登記、填第 7、30、90 天關懷問卷）；規則在 `supabase/migrations/20261111001200_adoption.sql`
 - `scripts/acceptance.mjs` 對真實 Supabase 的四角色權限驗收（`npm run test:acceptance`）
 - `.github/workflows/keepalive.yml` 每天喚醒 Supabase，避免免費專案 7 天沒活動被暫停
 

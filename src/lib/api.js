@@ -282,3 +282,18 @@ export const cancelTnrCase = (caseId) => rpc('cancel_tnr_case', { p_case_id: cas
 export const claimTnrTask = (taskId) => rpc('claim_tnr_task', { p_task_id: taskId })
 export const unclaimTnrTask = (taskId) => rpc('unclaim_tnr_task', { p_task_id: taskId })
 export const completeTnrTask = (taskId, note) => rpc('complete_tnr_task', { p_task_id: taskId, p_note: note || null })
+
+// ---------- 階段 5 延伸四：領養陪伴（FR-5.4） ----------
+export const ADOPTION_STATUS = { pending: ['待確認', 'warning'], active: ['陪伴中', 'primary'], completed: ['陪伴完成', 'success'] }
+export const ADOPTION_QUESTIONS = [['eating_ok', '吃飯、喝水正常嗎？'], ['health_ok', '健康狀況良好嗎？'], ['settled_ok', '已經適應新家了嗎？']]
+/** 帶 animalId：這隻動物目前的領養紀錄；不帶：跟我有關的。還沒套用資料庫時回傳 null */
+export async function getAdoptions(animalId, { silent = false } = {}) {
+  if (!supabase) return silent ? [] : null
+  try { return await rpc('get_adoptions', { p_animal_id: animalId || null }) } catch (e) { if (silent) return []; if (e.code === 'PGRST202') return null; throw e }
+}
+export const registerAdoption = (animalId, adoptedOn, note) =>
+  rpc('register_adoption', { p_animal_id: animalId, p_adopted_on: adoptedOn || null, p_note: note || null })
+export const confirmAdoption = (id) => rpc('confirm_adoption', { p_adoption_id: id })
+export const cancelAdoption = (id) => rpc('cancel_adoption', { p_adoption_id: id })
+export const submitAdoptionFollowup = (id, ans, note) =>
+  rpc('submit_adoption_followup', { p_followup_id: id, p_eating_ok: ans.eating_ok, p_health_ok: ans.health_ok, p_settled_ok: ans.settled_ok, p_note: note || null })

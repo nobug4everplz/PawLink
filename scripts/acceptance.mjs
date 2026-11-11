@@ -461,6 +461,49 @@ if (admin) {
   }
 }
 
+// ---------- 階段 5 延伸四：領養陪伴 ----------
+{
+  const probe = await user.c.rpc('get_adoptions', { p_animal_id: animalId })
+  if (probe.error) console.log('⚠️  資料庫還沒套用領養陪伴的 migration（20261111001200），略過領養陪伴測試：' + probe.error.message)
+  else {
+    // owner 另外建一隻不掛在餵食點的動物，user 與 care 對牠都沒有編輯權
+    const cat = await owner.c.from('animals').insert({ name: 'QA 領養貓', species: 'cat' }).select('id').single()
+    const catId = cat.data?.id
+    const day = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date(Date.now() - n * 86400000))
+    const status = async () => (await guest.from('animals').select('status').eq('id', catId).single()).data?.status
+    ok('訪客不能登記領養', !!(await guest.rpc('register_adoption', { p_animal_id: catId })).error)
+    ok('登入者不能直接讀領養表與問卷表', denied(await user.c.from('adoptions').select('id')) && denied(await user.c.from('adoption_followups').select('id')))
+    ok('領養日期不能是未來', !!(await user.c.rpc('register_adoption', { p_animal_id: catId, p_adopted_on: day(-2) })).error)
+    const reg = await user.c.rpc('register_adoption', { p_animal_id: catId, p_adopted_on: day(31), p_note: 'QA 領養' })
+    ok('會員登記領養後是待確認，動物狀態不變', !reg.error && !!reg.data && (await status()) === 'active', msg(reg))
+    ok('同一隻動物已有人登記時不能再登記', !!(await care.c.rpc('register_adoption', { p_animal_id: catId })).error)
+    ok('領養人不能自己確認', !!(await user.c.rpc('confirm_adoption', { p_adoption_id: reg.data })).error)
+    ok('不相關的人不能確認', !!(await care.c.rpc('confirm_adoption', { p_adoption_id: reg.data })).error)
+    const cf = await owner.c.rpc('confirm_adoption', { p_adoption_id: reg.data })
+    ok('建檔者確認後生效，動物標成已領養', !cf.error && (await status()) === 'adopted', msg(cf))
+    const mine = ((await user.c.rpc('get_adoptions')).data || []).find((r) => r.adoption_id === reg.data)
+    const fu = Object.fromEntries((mine?.followups || []).map((f) => [f.day_offset, f]))
+    ok('確認後產生第 7、30、90 天三份問卷', !!fu[7] && !!fu[30] && !!fu[90] && fu[7].due_on === day(24) && fu[90].due_on === day(-59), JSON.stringify(mine?.followups?.map((f) => f.due_on)))
+    ok('領養滿 31 天：第 7、30 天問卷到期，第 90 天還沒到', mine?.due_count === 2 && fu[7]?.is_due && fu[30]?.is_due && !fu[90]?.is_due, String(mine?.due_count))
+    const ans = (id, health = true) => ({ p_followup_id: id, p_eating_ok: true, p_health_ok: health, p_settled_ok: true })
+    ok('陪伴者不能代填問卷', !!(await owner.c.rpc('submit_adoption_followup', ans(fu[7]?.id))).error)
+    const a7 = await user.c.rpc('submit_adoption_followup', ans(fu[7]?.id))
+    ok('領養人填第 7 天問卷（三題都是）：沒有狀況', !a7.error && a7.data === false, msg(a7))
+    ok('填過的問卷不能再填', !!(await user.c.rpc('submit_adoption_followup', ans(fu[7]?.id))).error)
+    const a30 = await user.c.rpc('submit_adoption_followup', { ...ans(fu[30]?.id, false), p_note: 'QA 打噴嚏' })
+    ok('第 30 天問卷有一題答否：標成有狀況', !a30.error && a30.data === true, msg(a30))
+    ok('還沒到期的問卷不能先填', !!(await user.c.rpc('submit_adoption_followup', ans(fu[90]?.id))).error)
+    const buddy = ((await owner.c.rpc('get_adoptions')).data || []).find((r) => r.adoption_id === reg.data)
+    ok('陪伴者看得到有狀況的問卷', buddy?.my_role === 'buddy' && buddy.issue_count === 1 && buddy.followups.some((f) => f.note === 'QA 打噴嚏'), JSON.stringify(buddy?.issue_count))
+    const other = ((await care.c.rpc('get_adoptions', { p_animal_id: catId })).data || [])[0]
+    ok('其他會員只看得到狀態，看不到問卷內容', other?.my_role === 'viewer' && other.status === 'active' && other.followups.length === 0 && other.issue_count === 0, JSON.stringify(other?.my_role))
+    ok('不相關的人不能取消', !!(await care.c.rpc('cancel_adoption', { p_adoption_id: reg.data })).error)
+    const cx = await owner.c.rpc('cancel_adoption', { p_adoption_id: reg.data })
+    ok('陪伴者登記退養後，動物回到一般狀態', !cx.error && (await status()) === 'active', msg(cx))
+    await owner.c.from('animals').delete().eq('id', catId)
+  }
+}
+
 // ---------- 收尾 ----------
 {
   ok('建檔者可刪自己的動物', allowed(await user.c.from('animals').delete().eq('id', animalId).select('id')))
