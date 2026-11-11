@@ -1,4 +1,4 @@
-# 權限矩陣（第一～三階段，2026-11-11 定案）
+# 權限矩陣（第一～三階段與哨兵，2026-11-11 定案）
 
 設計決策（照顧者以餵食點為單位、TNR 五階段等）見 `decisions.md`。
 
@@ -61,6 +61,13 @@
 | **content_flags**（階段 3） | 讀 | ❌ | 🟡 自己送出的 | 🟡 同左 | ✅ |
 | | 新增（檢舉） | ❌ | ✅ 每則內容一次 | ✅ | ✅ |
 
+| **sightings**（哨兵） | 讀 | ❌（只看得到 `animals.last_seen_at`） | ✅ | ✅ | ✅ |
+| | 新增 | ❌ | 🔒 `report_sighting`（10 分鐘 1 次／隻、1 小時 30 次） | 🔒 同左 | 🔒 同左 |
+| | 改、刪 | ❌ | ❌ | ❌ | ❌ |
+| **animal_alerts**（哨兵） | 讀 | ❌ | 🟡 自己建檔的動物 | 🟡 出沒在自己照顧的點的動物 | ✅ |
+| | 新增 | ❌ | ❌（由 `report_sighting` 與每日排程產生） | ❌ | 🔒 `admin_run_sentinel` 手動執行檢查 |
+| | 結案 | ❌ | 🔒 `resolve_animal_alert`（自己建檔的動物） | 🔒 `resolve_animal_alert` | 🔒 `resolve_animal_alert` |
+
 `neighbor_reports.ip_hash` 與 `private.app_secrets`（IP 雜湊的鹽、Turnstile secret）任何前端角色都讀不到。
 
 ## 階段 2 的 RPC 權限
@@ -76,6 +83,8 @@
 後台頁面（`/admin`）的路由守衛只是介面上的擋門，權限一律由上表的 RLS 與 RPC 檢查決定。
 
 ## 一定不能改的欄位（用欄位層級 GRANT 擋住）
+
+- `animals.last_seen_at`：只由 `report_sighting` 更新；建檔時一律從現在起算。
 
 - `profiles.role`、`id`
 - 各表的 `created_by`、`user_id`、`uploaded_by`、`added_by`、`created_at`
