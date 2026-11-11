@@ -6,7 +6,7 @@ import 'leaflet.markercluster'
 import { showToast } from 'vant'
 import { auth, signOut } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
-import { subscribeFeeding, getSpotSummary } from '../lib/api'
+import { subscribeFeeding, getSpotSummary, getPendingCleanups } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
 import SpotPanel from '../components/SpotPanel.vue'
 
@@ -15,7 +15,8 @@ const mapEl = ref(null)
 const selectedId = ref(null)
 const showPanel = ref(false)
 const refreshKey = ref(0)
-let map, cluster, meMarker, timer, unsub
+const pending = ref([]) // 我還沒回報清理的餵食（餵食後 30 分鐘～24 小時）
+let map, cluster, meMarker, timer, unsub, pendingTimer
 let spots = []
 
 async function loadSpots() {
@@ -30,7 +31,21 @@ async function loadSpots() {
   } catch (e) { showToast('載入餵食點失敗：' + e.message) }
 }
 function select(id) { selectedId.value = id; showPanel.value = true }
-function onChanged() { loadSpots() }
+async function loadPending() {
+  if (!auth.user) { pending.value = []; return }
+  try { pending.value = await getPendingCleanups() } catch { /* 提醒載入失敗不影響地圖 */ }
+}
+function onChanged() { loadSpots(); loadPending() }
+/** 點清理提醒：跳到最早一筆未清理的餵食點並開啟面板 */
+async function goPending() {
+  const p = pending.value[0]
+  if (!p) return
+  try {
+    const s = await getSpotSummary(p.spot_id)
+    if (s?.lat != null) map.setView([s.lat, s.lng], 17)
+  } catch { /* 定位不到仍開面板 */ }
+  select(p.spot_id)
+}
 
 function locate() { map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true }) }
 
@@ -55,6 +70,8 @@ onMounted(() => {
   map.on('moveend', () => { clearTimeout(timer); timer = setTimeout(loadSpots, 300) })
   // 長按（右鍵 / 手機長按）選點建檔
   map.on('contextmenu', (e) => addSpotAt(e.latlng))
+  // 點地圖空白處收起面板
+  map.on('click', () => { showPanel.value = false })
 
   const id = route.query.spot
   if (id) {
@@ -63,16 +80,21 @@ onMounted(() => {
       .then((s) => { if (s?.lat != null) { map.setView([s.lat, s.lng], 17); select(id) } else loadSpots() })
       .catch(() => loadSpots())
   } else loadSpots()
-  unsub = subscribeFeeding(() => { loadSpots(); refreshKey.value++ })
+  unsub = subscribeFeeding(() => { loadSpots(); loadPending(); refreshKey.value++ })
+  loadPending()
+  pendingTimer = setInterval(loadPending, 5 * 60e3)
 })
-onBeforeUnmount(() => { unsub?.(); map?.remove() })
-watch(() => auth.user?.id, () => { if (map) loadSpots() })
+onBeforeUnmount(() => { unsub?.(); clearInterval(pendingTimer); map?.remove() })
+watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending() } })
 </script>
 
 <template>
   <div class="page">
     <div ref="mapEl" class="map" />
-    <div class="top">
+    <van-notice-bar v-if="pending.length" class="pending" left-icon="brush-o" mode="link" :scrollable="false" @click="goPending">
+      你有 {{ pending.length }} 筆餵食還沒回報清理（{{ pending[0].spot_name }}）
+    </van-notice-bar>
+    <div class="top" :class="{ shifted: pending.length }">
       <van-button v-if="!auth.user" size="small" round type="primary" @click="router.push('/login')">登入</van-button>
       <van-button v-else size="small" round plain @click="signOut">{{ auth.profile?.display_name || '已登入' }}・登出</van-button>
     </div>
@@ -80,7 +102,7 @@ watch(() => auth.user?.id, () => { if (map) loadSpots() })
       <van-button round icon="aim" type="primary" class="fab" @click="locate" />
       <van-button round icon="plus" type="success" class="fab" @click="addHere" />
     </div>
-    <van-popup v-model:show="showPanel" position="bottom" round :overlay="false" class="panel">
+    <van-popup v-model:show="showPanel" position="bottom" round :overlay="false" closeable class="panel">
       <SpotPanel :spot-id="selectedId" :refresh-key="refreshKey" @changed="onChanged" />
     </van-popup>
   </div>
@@ -90,6 +112,8 @@ watch(() => auth.user?.id, () => { if (map) loadSpots() })
 .page { position: relative; height: 100%; }
 .map { height: 100%; }
 .top { position: absolute; top: 12px; right: 12px; z-index: 1000; background: #fff; border-radius: 16px; }
+.top.shifted { top: 52px; }
+.pending { position: absolute; top: 0; left: 0; right: 0; z-index: 1000; }
 .fabs { position: absolute; right: 16px; bottom: 32px; z-index: 1000; display: flex; flex-direction: column; gap: 12px; }
 .fab { width: 48px; height: 48px; }
 </style>
