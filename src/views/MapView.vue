@@ -4,9 +4,9 @@ import { useRoute, useRouter } from 'vue-router'
 import L from 'leaflet'
 import 'leaflet.markercluster'
 import { showToast } from 'vant'
-import { auth, signOut } from '../lib/auth'
+import { auth, signOut, isAdmin } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
-import { subscribeFeeding, getSpotSummary, getPendingCleanups } from '../lib/api'
+import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
 import SpotPanel from '../components/SpotPanel.vue'
 
@@ -16,7 +16,8 @@ const selectedId = ref(null)
 const showPanel = ref(false)
 const refreshKey = ref(0)
 const pending = ref([]) // 我還沒回報清理的餵食（餵食後 30 分鐘～24 小時）
-let map, cluster, meMarker, timer, unsub, pendingTimer
+let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer
+const zoneCount = ref(0)
 let spots = []
 
 async function loadSpots() {
@@ -29,6 +30,19 @@ async function loadSpots() {
       cluster.addLayer(m)
     }
   } catch (e) { showToast('載入餵食點失敗：' + e.message) }
+}
+/** 保育熱區：紅色為範圍、黃色虛線為 200 公尺警示帶。不攔截點擊，長按建點照常可用 */
+async function loadZones() {
+  const zones = await getZones()
+  if (!map) return
+  zoneLayer.clearLayers()
+  for (const z of zones) {
+    L.geoJSON(z.buffer_geojson, { interactive: false, style: { color: '#d99a00', weight: 1.5, dashArray: '6 6', fillColor: '#f2b705', fillOpacity: 0.12 } }).addTo(zoneLayer)
+    L.geoJSON(z.geojson, { interactive: false, style: { color: '#e03e3e', weight: 2, fillColor: '#e03e3e', fillOpacity: 0.18 } })
+      .bindTooltip(`保育熱區：${z.name}${z.is_demo ? '（示意）' : ''}`, { permanent: true, direction: 'center', className: 'zone-label' })
+      .addTo(zoneLayer)
+  }
+  zoneCount.value = zones.length
 }
 function select(id) { selectedId.value = id; showPanel.value = true }
 async function loadPending() {
@@ -61,6 +75,8 @@ onMounted(() => {
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map)
   cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 50 })
   map.addLayer(cluster)
+  zoneLayer = L.layerGroup().addTo(map)
+  loadZones()
 
   map.on('locationfound', (e) => {
     if (meMarker) meMarker.remove()
@@ -98,6 +114,11 @@ watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending() } })
       <van-button v-if="!auth.user" size="small" round type="primary" @click="router.push('/login')">登入</van-button>
       <van-button v-else size="small" round plain @click="signOut">{{ auth.profile?.display_name || '已登入' }}・登出</van-button>
     </div>
+    <div class="links" :class="{ shifted: pending.length }">
+      <van-button size="small" round plain type="success" icon="flower-o" @click="router.push({ name: 'conservation' })">保育宣導</van-button>
+      <van-button v-if="isAdmin()" size="small" round plain type="danger" icon="setting-o" @click="router.push({ name: 'admin' })">管理後台</van-button>
+    </div>
+    <div v-if="zoneCount" class="legend"><i class="red" />保育熱區<i class="yellow" />200 公尺警示帶</div>
     <div class="fabs">
       <van-button round icon="aim" type="primary" class="fab" @click="locate" />
       <van-button round icon="plus" type="success" class="fab" @click="addHere" />
@@ -112,7 +133,13 @@ watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending() } })
 .page { position: relative; height: 100%; }
 .map { height: 100%; }
 .top { position: absolute; top: 12px; right: 12px; z-index: 1000; background: #fff; border-radius: 16px; }
-.top.shifted { top: 52px; }
+.top.shifted, .links.shifted { top: 52px; }
+.links { position: absolute; top: 12px; left: 12px; z-index: 1000; display: flex; gap: 8px; }
+.links .van-button { background: #fff; }
+.legend { position: absolute; left: 12px; bottom: 28px; z-index: 1000; background: rgba(255,255,255,.92); border-radius: 8px; padding: 4px 10px; font-size: 12px; color: #444; display: flex; align-items: center; gap: 4px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 4px; }
+.legend i.red { background: rgba(224,62,62,.45); border: 1px solid #e03e3e; }
+.legend i.yellow { background: rgba(242,183,5,.35); border: 1px dashed #d99a00; }
 .pending { position: absolute; top: 0; left: 0; right: 0; z-index: 1000; }
 .fabs { position: absolute; right: 16px; bottom: 32px; z-index: 1000; display: flex; flex-direction: column; gap: 12px; }
 .fab { width: 48px; height: 48px; }

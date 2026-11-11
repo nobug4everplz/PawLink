@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { auth, initAuth } from '../lib/auth'
+import { showToast } from 'vant'
+import { auth, initAuth, isAdmin } from '../lib/auth'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -9,6 +10,9 @@ const router = createRouter({
     { path: '/spots/new', name: 'spot-new', component: () => import('../views/SpotNewView.vue'), meta: { auth: true } },
     { path: '/spots/:id/animals/new', name: 'animal-new', component: () => import('../views/AnimalNewView.vue'), meta: { auth: true } },
     { path: '/animals/:id', name: 'animal', component: () => import('../views/AnimalView.vue') },
+    { path: '/conservation', name: 'conservation', component: () => import('../views/ConservationView.vue') },
+    { path: '/admin', name: 'admin', component: () => import('../views/AdminView.vue'), meta: { auth: true, admin: true } },
+    { path: '/admin/zones/:id', name: 'zone-edit', component: () => import('../views/ZoneEditView.vue'), meta: { auth: true, admin: true } },
   ],
 })
 
@@ -16,5 +20,7 @@ const ready = initAuth()
 router.beforeEach(async (to) => {
   await ready
   if (to.meta.auth && !auth.user) return { name: 'login', query: { redirect: to.fullPath } }
+  // 只是介面上的擋門；真正的權限由資料庫 RLS 與 RPC 檢查
+  if (to.meta.admin && !isAdmin()) { showToast('只有管理員可以進入後台'); return { name: 'map' } }
 })
 export default router

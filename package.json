@@ -10,6 +10,7 @@
     "test:acceptance": "node scripts/acceptance.mjs"
   },
   "dependencies": {
+    "@geoman-io/leaflet-geoman-free": "^2.20.6",
     "@supabase/supabase-js": "^2.119.0",
     "@vitejs/plugin-vue": "^6.0.10",
     "leaflet": "^1.9.4",

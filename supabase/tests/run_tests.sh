@@ -12,6 +12,8 @@ for f in ../migrations/*.sql; do
   echo "== 套用 $(basename "$f")"
   psql -q -v ON_ERROR_STOP=1 -d "$DB" -f "$f"
 done
-echo "== 執行權限與規則測試"
-psql -q -v ON_ERROR_STOP=1 -d "$DB" -f 10_rls_and_rules.sql
+for t in [1-9]*.sql; do
+  echo "== 執行測試 $t"
+  psql -q -v ON_ERROR_STOP=1 -d "$DB" -f "$t"
+done
 dropdb "$DB"

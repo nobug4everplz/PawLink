@@ -1,4 +1,4 @@
-# 前端資料介面（第一階段）
+# 前端資料介面（第一、二階段）
 
 前端用 `supabase-js`。地圖與統計一律走 RPC；其他 CRUD 直接用 `supabase.from('表')`，權限由 RLS 把關。
 
@@ -12,6 +12,7 @@
 | 清理提醒 | 餵食後 30 分鐘～24 小時 | `get_my_pending_cleanups` |
 | 清理率 | 近 30 天 | `get_map_spots`、`get_spot_summary` |
 | 訪客位置模糊 | 100 公尺網格 | `private.fuzz_point` |
+| 保育警示 | 熱區範圍內 `red`、範圍外 200 公尺內 `yellow`、其他 `none` | `check_conservation_alert` |
 | TNR 五階段 | 1 未結紮、2 誘捕中、3 已手術、4 術後照護、5 已原地回置；3 起 `is_sterilized = true` | `animals.tnr_stage` |
 
 ## RPC
@@ -27,6 +28,21 @@
 | `report_cleanup` | 登入者 | `p_log_id` | `cleaned_at` | 清理回報按鈕 |
 | `get_my_pending_cleanups` | 登入者 | 無 | `log_id, spot_id, spot_name, fed_at` | 開 App 時提醒「你在 X 點的餵食還沒回報清理」 |
 | `set_user_role` | 管理員 | `p_user_id, p_role ('user'/'admin')` | 無 | 階段二管理員後台 |
+
+### 階段 2：保育警示與管理員後台
+
+| 函式 | 誰可呼叫 | 參數 | 回傳 | 用在哪 |
+| --- | --- | --- | --- | --- |
+| `get_conservation_zones` | 所有人 | 無 | `id, name, species, description, is_demo, geojson, buffer_geojson, updated_at`（只有使用中的熱區） | 地圖畫熱區（紅）與 200 公尺警示帶（黃）、宣導頁 |
+| `check_conservation_alert` | 所有人 | `p_lat, p_lng` | 一定一列：`level`（`red` 範圍內／`yellow` 範圍外 200 公尺內／`none`）`, zone_id, zone_name, species, distance_m, is_demo` | 建點表單 |
+| `check_spot_conservation_alert` | 登入者 | `p_spot_id` | 同上（點不存在回 0 列） | 動物建檔、餵食點面板 |
+| `save_conservation_zone` | 管理員 | `p_name, p_geojson, p_species?, p_description?, p_is_demo = true, p_id?` | 熱區 `uuid` | 熱區繪製。`p_geojson` 收 Polygon 或 Feature；自我相交（`ST_IsValid` 不通過）、非單一多邊形、超過 500 個頂點或 10,000 平方公里會被拒絕 |
+| `admin_list_users` | 管理員 | `p_search?, p_limit = 50` | `id, display_name, email, role, created_at, spot_count` | 後台使用者清單 |
+| `set_user_role` | 管理員 | `p_user_id, p_role` | 無 | 後台角色設定；最後一位管理員不能被降級 |
+| `admin_list_spots` | 管理員 | `p_search?, p_limit = 100` | `id, name, status, lat, lng, created_at, owner_names, caretaker_count, alert_level, zone_name`（含停用的點） | 後台餵食點管理 |
+| `admin_set_spot_owner` | 管理員 | `p_spot_id, p_user_id` | 無 | 補上沒有 owner 的餵食點 |
+
+熱區的停用、啟用與刪除直接寫 `conservation_zones`（`status` 欄位、`delete`），由 RLS 限制只有管理員可以。
 
 `food_type`：`dry` 乾糧、`wet` 濕食、`mixed` 混合、`other` 其他。
 

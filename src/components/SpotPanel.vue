@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { auth } from '../lib/auth'
-import { getSpotSummary, listSpotAnimals, checkRecentFeeding, recordFeeding, getPendingCleanups, reportCleanup, joinSpot, photoUrl } from '../lib/api'
+import { getSpotSummary, listSpotAnimals, checkRecentFeeding, recordFeeding, getPendingCleanups, reportCleanup, joinSpot, photoUrl, checkSpotAlert } from '../lib/api'
 
 const props = defineProps({ spotId: String, refreshKey: Number })
 const emit = defineEmits(['changed'])
@@ -13,7 +13,7 @@ const FOOT = { fresh: ['剛餵過', '#2f9e6b'], recent: ['一陣子前', '#f2b70
 const FOOD = [{ text: '乾糧', value: 'dry' }, { text: '濕食', value: 'wet' }, { text: '混合', value: 'mixed' }, { text: '其他', value: 'other' }]
 const STAGE = ['', '未結紮', '誘捕中', '已手術', '術後照護', '已原地回置']
 
-const s = ref(null), animals = ref([]), pending = ref([]), busy = ref(false)
+const s = ref(null), animals = ref([]), pending = ref([]), busy = ref(false), alert = ref(null)
 const showFeed = ref(false), food = ref('dry'), note = ref('')
 
 async function load() {
@@ -22,6 +22,7 @@ async function load() {
     s.value = await getSpotSummary(props.spotId)
     animals.value = await listSpotAnimals(props.spotId)
     pending.value = auth.user ? (await getPendingCleanups()).filter((p) => p.spot_id === props.spotId) : []
+    alert.value = auth.user ? await checkSpotAlert(props.spotId) : null
   } catch (e) { showToast(e.message) }
 }
 watch(() => [props.spotId, props.refreshKey, auth.user?.id], load, { immediate: true })
@@ -63,7 +64,10 @@ const cover = (a) => {
   <div v-if="s" class="info">
     <h3>{{ s.name }}
       <van-tag :color="FOOT[s.footprint]?.[1]" style="margin-left:6px">{{ FOOT[s.footprint]?.[0] }}</van-tag>
+      <van-tag v-if="alert?.level === 'red'" color="#e03e3e" style="margin-left:6px" @click="router.push({ name: 'conservation' })">保育熱區內</van-tag>
+      <van-tag v-else-if="alert?.level === 'yellow'" color="#f2b705" text-color="#5b4300" style="margin-left:6px" @click="router.push({ name: 'conservation' })">鄰近保育熱區</van-tag>
     </h3>
+    <p v-if="alert && alert.level !== 'none'" class="cz">{{ alert.level === 'red' ? '位在' : `距離約 ${Math.round(alert.distance_m)} 公尺：` }}保育熱區「{{ alert.zone_name }}」{{ alert.level === 'red' ? '範圍內' : '' }}，請餵完就清理、不要留食物過夜。</p>
     <p v-if="s.description" class="desc">{{ s.description }}</p>
     <p>動物 {{ s.animal_count }} 隻・<b class="ster">已結紮 {{ s.sterilized_count }} 隻</b></p>
     <p>近 30 天清理率：{{ s.clean_rate_30d == null ? '尚無資料' : Math.round(s.clean_rate_30d * 100) + '%' }}
@@ -110,6 +114,7 @@ const cover = (a) => {
 .desc { color: #666; }
 .ster { color: #2f9e6b; }
 .hint { color: #999; font-size: 12px; }
+.info p.cz { color: #b42318; font-size: 13px; }
 .btns { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
 .animals { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 4px; }
 .animal { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 64px; }
