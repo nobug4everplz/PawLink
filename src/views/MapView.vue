@@ -6,7 +6,7 @@ import { showToast } from 'vant'
 import { auth, signOut, isAdmin } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
 import { net, flushQueue, onFlushed, refreshQueueCount } from '../lib/offlineQueue'
-import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones, getReportInbox, getAnimalAlerts } from '../lib/api'
+import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones, getReportInbox, getAnimalAlerts, getShifts } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
 import SpotPanel from '../components/SpotPanel.vue'
 
@@ -20,6 +20,7 @@ let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer, zoneBounds, o
 const showingCached = ref(false)
 const showInstall = ref(false)
 const zoneCount = ref(0)
+const needCover = ref(0) // 我照顧的點有別人在求代班的班數
 const openReports = ref(0) // 我照顧的點還沒處理的居民通報，加上還沒處理的動物提醒
 let spots = []
 
@@ -68,9 +69,10 @@ async function loadPending() {
   try { pending.value = await getPendingCleanups() } catch { /* 提醒載入失敗不影響地圖 */ }
 }
 async function loadInbox() {
-  if (!auth.user) { openReports.value = 0; return }
+  if (!auth.user) { openReports.value = 0; needCover.value = 0; return }
   const [reports, alerts] = await Promise.all([getReportInbox({ silent: true }), getAnimalAlerts({ silent: true })])
   openReports.value = reports.filter((r) => r.status === 'open').length + alerts.filter((a) => a.status === 'open').length
+  needCover.value = (await getShifts({ silent: true })).filter((x) => x.can_claim).length
 }
 function onChanged() { loadSpots(); loadPending() }
 /** 點清理提醒：跳到最早一筆未清理的餵食點並開啟面板 */
@@ -155,9 +157,14 @@ watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
       <van-button v-if="auth.user" size="small" round plain type="primary" icon="chat-o" @click="router.push({ name: 'community' })">交流</van-button>
       <van-button v-if="isAdmin()" size="small" round plain type="danger" icon="setting-o" @click="router.push({ name: 'admin' })">後台</van-button>
     </div>
-    <van-badge v-if="auth.user" :content="openReports || ''" :show-zero="false" class="inbox" :class="{ shifted: pending.length }">
-      <van-button size="small" round plain icon="envelop-o" @click="router.push({ name: 'inbox' })">通知</van-button>
-    </van-badge>
+    <div v-if="auth.user" class="row2" :class="{ shifted: pending.length }">
+      <van-badge :content="openReports || ''" :show-zero="false" class="inbox">
+        <van-button size="small" round plain icon="envelop-o" @click="router.push({ name: 'inbox' })">通知</van-button>
+      </van-badge>
+      <van-badge :content="needCover || ''" :show-zero="false" class="shifts">
+        <van-button size="small" round plain icon="calendar-o" @click="router.push({ name: 'shifts' })">輪值</van-button>
+      </van-badge>
+    </div>
     <div v-if="!net.online || net.count || showingCached" class="offline" @click="flushNow">
       <van-icon :name="net.online ? 'upgrade' : 'warning-o'" />
       <span v-if="net.count">{{ net.flushing ? '補傳中…' : `有 ${net.count} 筆餵食紀錄待補傳` }}{{ net.online ? '，點這裡立刻補傳' : '，恢復連線後自動補傳' }}</span>
@@ -183,9 +190,9 @@ watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
 .map { height: 100%; }
 .top { position: absolute; top: 12px; right: 12px; z-index: 1000; background: #fff; border-radius: 16px; }
 .top.shifted, .links.shifted { top: 52px; }
-.inbox { position: absolute; top: 52px; left: 12px; z-index: 1000; }
-.inbox.shifted { top: 92px; }
-.inbox .van-button { background: #fff; }
+.row2 { position: absolute; top: 52px; left: 12px; z-index: 1000; display: flex; gap: 8px; }
+.row2.shifted { top: 92px; }
+.row2 .van-button { background: #fff; }
 .links { position: absolute; top: 12px; left: 12px; z-index: 1000; display: flex; gap: 8px; }
 .links .van-button { background: #fff; }
 .offline { position: absolute; left: 12px; right: 76px; bottom: 64px; z-index: 1000; background: #323233; color: #fff; border-radius: 10px; padding: 8px 12px; font-size: 13px; display: flex; gap: 8px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.3); }

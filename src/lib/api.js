@@ -253,3 +253,19 @@ export async function getAnimalAlerts({ silent = false } = {}) {
 export const resolveAnimalAlert = (id, note, markMissing = false) =>
   rpc('resolve_animal_alert', { p_alert_id: id, p_note: note || null, p_mark_missing: markMissing })
 export const adminRunSentinel = (run = true) => rpc('admin_run_sentinel', { p_run: run })
+
+// ---------- 階段 5 延伸二：餵食輪值與代班（FR-5.1） ----------
+export const SHIFT_SLOT = { morning: '早上', evening: '晚上' }
+export const SHIFT_STATUS = { scheduled: ['已排班', 'primary'], need_cover: ['求代班', 'warning'], covered: ['已代班', 'success'], done: ['已完成', 'default'] }
+/** 還沒套用輪值的資料庫時回傳 null */
+export async function getShifts({ silent = false } = {}) {
+  if (!supabase) return silent ? [] : null
+  try { return await rpc('get_my_shifts') } catch (e) { if (silent) return []; if (e.code === 'PGRST202') return null; throw e }
+}
+export const getShiftSpots = () => rpc('get_my_shift_spots')
+export const createShift = (spotId, date, slot, note) =>
+  rpc('create_shift', { p_spot_id: spotId, p_date: date, p_slot: slot, p_note: note || null })
+export const cancelShift = (id) => rpc('cancel_shift', { p_shift_id: id })
+export const requestShiftCover = (id, need = true) => rpc('request_shift_cover', { p_shift_id: id, p_need: need })
+export const claimShift = (id) => rpc('claim_shift', { p_shift_id: id })
+export const completeShift = (id) => rpc('complete_shift', { p_shift_id: id })

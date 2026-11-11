@@ -15,6 +15,7 @@ const router = createRouter({
     { path: '/spots/:id/report', name: 'spot-report', component: () => import('../views/ReportView.vue') },
     { path: '/spots/:id/progress', name: 'spot-progress', component: () => import('../views/SpotProgressView.vue') },
     { path: '/reports', name: 'inbox', component: () => import('../views/InboxView.vue'), meta: { auth: true } },
+    { path: '/shifts', name: 'shifts', component: () => import('../views/ShiftsView.vue'), meta: { auth: true } },
     { path: '/community', name: 'community', component: () => import('../views/CommunityView.vue'), meta: { auth: true } },
     { path: '/community/:id', name: 'post', component: () => import('../views/PostView.vue'), meta: { auth: true } },
     { path: '/admin', name: 'admin', component: () => import('../views/AdminView.vue'), meta: { auth: true, admin: true } },

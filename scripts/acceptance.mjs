@@ -379,6 +379,49 @@ if (admin) {
   }
 }
 
+// ---------- 階段 5 延伸二：餵食輪值與代班 ----------
+{
+  const probe = await owner.c.rpc('get_my_shifts')
+  if (probe.error) console.log('⚠️  資料庫還沒套用輪值的 migration（20261111001000），略過輪值測試：' + probe.error.message)
+  else {
+    const tw = (n) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date(Date.now() + n * 86400000))
+    const mk = (c, date, slot) => c.rpc('create_shift', { p_spot_id: spotId, p_date: date, p_slot: slot })
+    ok('訪客不能登記輪值', !!(await guest.rpc('create_shift', { p_spot_id: spotId, p_date: tw(1), p_slot: 'morning' })).error)
+    ok('訪客讀不到班表', denied(await guest.from('feeding_shifts').select('id')))
+    ok('不是該點照顧者不能登記輪值', !!(await mk(user.c, tw(1), 'morning')).error)
+    ok('過去的日期被擋下', !!(await mk(owner.c, tw(-1), 'morning')).error)
+    const s1 = await mk(owner.c, tw(1), 'morning')
+    ok('照顧者可以登記輪值', !s1.error && !!s1.data, msg(s1))
+    ok('同一個點同一時段已有人排班時被擋下', !!(await mk(care.c, tw(1), 'morning')).error)
+    ok('不能繞過 RPC 直接改班表', denied(await owner.c.from('feeding_shifts').update({ status: 'done' }).eq('id', s1.data).select('id')))
+    ok('班次不是求代班時不能認領', !!(await care.c.rpc('claim_shift', { p_shift_id: s1.data })).error)
+    ok('排班者可以求代班', !(await owner.c.rpc('request_shift_cover', { p_shift_id: s1.data })).error)
+    ok('不能代自己的班', !!(await owner.c.rpc('claim_shift', { p_shift_id: s1.data })).error)
+    // user 也加入照顧者，和 care 同時認領
+    await user.c.from('spot_caretakers').insert({ spot_id: spotId, user_id: user.id })
+    const [c1, c2] = await Promise.all([care.c.rpc('claim_shift', { p_shift_id: s1.data }), user.c.rpc('claim_shift', { p_shift_id: s1.data })])
+    const lost = [c1, c2].find((r) => r.error)
+    ok('兩人同時認領只有一人成功', [c1, c2].filter((r) => !r.error).length === 1 && /已有人接了/.test(lost?.error?.message || ''), `${msg(c1)} / ${msg(c2)}`)
+    const winner = c1.error ? user : care
+    const mine = await owner.c.rpc('get_my_shifts')
+    const row = mine.data?.find((x) => x.id === s1.data)
+    ok('原排班者看到已由誰代班', row?.status === 'covered' && row?.cover_user_id === winner.id && !!row?.cover_name, msg(mine))
+    ok('代班者同時段不能再排別的班', !!(await mk(winner.c, tw(1), 'morning')).error)
+    ok('已有人代班的班不能取消', !!(await owner.c.rpc('cancel_shift', { p_shift_id: s1.data })).error)
+    const s2 = await mk(owner.c, tw(0), 'evening')
+    ok('負責的人可以把今天的班標記完成', !s2.error && !(await owner.c.rpc('complete_shift', { p_shift_id: s2.data })).error, msg(s2))
+    const s3 = await mk(owner.c, tw(2), 'evening')
+    ok('排班者可以取消還沒被代的班', !s3.error && !(await owner.c.rpc('cancel_shift', { p_shift_id: s3.data })).error, msg(s3))
+    // 清掉測試留下的班（已代班、已完成的只有管理員能刪）
+    const isAdm = admin && (await admin.c.from('profiles').select('role').eq('id', admin.id).single()).data?.role === 'admin'
+    if (isAdm) {
+      const d1 = await admin.c.rpc('cancel_shift', { p_shift_id: s1.data }), d2 = await admin.c.rpc('cancel_shift', { p_shift_id: s2.data })
+      ok('管理員可以刪除任何一班', !d1.error && !d2.error, `${msg(d1)} / ${msg(d2)}`)
+    }
+    await user.c.from('spot_caretakers').delete().eq('spot_id', spotId).eq('user_id', user.id)
+  }
+}
+
 // ---------- 收尾 ----------
 {
   ok('建檔者可刪自己的動物', allowed(await user.c.from('animals').delete().eq('id', animalId).select('id')))
