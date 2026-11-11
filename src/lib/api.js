@@ -36,7 +36,7 @@ export async function listSpotAnimals(spotId) {
   if (!supabase) return []
   const { data, error } = await supabase
     .from('spot_animals')
-    .select('animal:animals(id,name,species,tnr_stage,is_sterilized,animal_photos(storage_path,created_at))')
+    .select('animal:animals(id,name,species,tnr_stage,is_sterilized,animal_photos!animal_photos_animal_id_fkey(storage_path,created_at))')
     .eq('spot_id', spotId)
   if (error) throw error
   return data.map((r) => r.animal)
@@ -44,7 +44,7 @@ export async function listSpotAnimals(spotId) {
 export async function getAnimal(id) {
   const { data, error } = await need()
     .from('animals')
-    .select('*, animal_photos(id,storage_path,created_at), spot_animals(spot_id)')
+    .select('*, animal_photos!animal_photos_animal_id_fkey(id,storage_path,created_at), spot_animals(spot_id)')
     .eq('id', id).single()
   if (error) throw error
   return data
@@ -61,8 +61,9 @@ export async function updateTnrStage(animalId, stage) {
   if (error) throw error
 }
 export async function uploadAnimalPhoto(animalId, blob) {
-  const path = `${animalId}/${crypto.randomUUID()}.webp`
-  const up = await need().storage.from('animal-photos').upload(path, blob, { contentType: 'image/webp' })
+  const ext = blob.type === 'image/jpeg' ? 'jpg' : 'webp'
+  const path = `${animalId}/${crypto.randomUUID()}.${ext}`
+  const up = await need().storage.from('animal-photos').upload(path, blob, { contentType: blob.type })
   if (up.error) throw up.error
   const { error } = await need().from('animal_photos').insert({ animal_id: animalId, storage_path: path })
   if (error) throw error

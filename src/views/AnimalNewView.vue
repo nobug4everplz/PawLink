@@ -15,7 +15,10 @@ async function submit() {
   try {
     const fields = { ...f.value, coat: f.value.coat || null, features: f.value.features || null }
     const a = await createAnimal(route.params.id, fields)
-    for (const it of files.value) await uploadAnimalPhoto(a.id, await compressImage(it.file))
+    for (const it of files.value) {
+      try { await uploadAnimalPhoto(a.id, await compressImage(it.file)) }
+      catch (e) { showToast('照片上傳失敗：' + (e.message || e)) }
+    }
     router.replace({ name: 'animal', params: { id: a.id } })
   } catch (e) { showToast(e.message) } finally { busy.value = false }
 }

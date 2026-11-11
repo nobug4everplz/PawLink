@@ -6,7 +6,7 @@ import 'leaflet.markercluster'
 import { showToast } from 'vant'
 import { auth, signOut } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
-import { subscribeFeeding } from '../lib/api'
+import { subscribeFeeding, getSpotSummary } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
 import SpotPanel from '../components/SpotPanel.vue'
 
@@ -56,11 +56,13 @@ onMounted(() => {
   // 長按（右鍵 / 手機長按）選點建檔
   map.on('contextmenu', (e) => addSpotAt(e.latlng))
 
-  loadSpots().then(() => {
-    const id = route.query.spot
-    const s = spots.find((x) => x.id === id)
-    if (s) { map.setView([s.lat, s.lng], 17); select(id) }
-  })
+  const id = route.query.spot
+  if (id) {
+    // 從建點頁回來：直接跳到該點（不論目前視窗是否包含它）
+    getSpotSummary(id)
+      .then((s) => { if (s?.lat != null) { map.setView([s.lat, s.lng], 17); select(id) } else loadSpots() })
+      .catch(() => loadSpots())
+  } else loadSpots()
   unsub = subscribeFeeding(() => { loadSpots(); refreshKey.value++ })
 })
 onBeforeUnmount(() => { unsub?.(); map?.remove() })
