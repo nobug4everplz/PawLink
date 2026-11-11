@@ -2,8 +2,7 @@
 // 保育熱區繪製（FR-3.1）：Leaflet-Geoman 畫一個多邊形，送出時由資料庫 ST_IsValid 驗證
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import L from 'leaflet'
-import '@geoman-io/leaflet-geoman-free'
+import L, { loadGeoman } from '../lib/leaflet'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import { showToast, showDialog } from 'vant'
 import { getZones, saveZone } from '../lib/api'
@@ -32,6 +31,8 @@ function redraw() {
 }
 
 onMounted(async () => {
+  await loadGeoman()
+  if (!mapEl.value) return
   map = L.map(mapEl.value, { zoomControl: true }).setView([24.45, 120.78], 12) // 預設在苗栗淺山一帶
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map)
   map.pm.setLang('zh_tw')

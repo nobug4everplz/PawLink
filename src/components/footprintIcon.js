@@ -1,4 +1,4 @@
-import L from 'leaflet'
+import L from '../lib/leaflet'
 
 // 腳印顏色：新鮮(6h內)綠、普通黃、久未餵食(24h+)紅
 const COLORS = { fresh: '#2f9e6b', recent: '#f2b705', hungry: '#e03e3e' }

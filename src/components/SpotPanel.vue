@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { auth } from '../lib/auth'
+import { isNetworkError } from '../lib/offlineQueue'
 import { getSpotSummary, listSpotAnimals, checkRecentFeeding, recordFeeding, getPendingCleanups, reportCleanup, joinSpot, photoUrl, checkSpotAlert } from '../lib/api'
 
 const props = defineProps({ spotId: String, refreshKey: Number })
@@ -20,10 +21,11 @@ async function load() {
   if (!props.spotId) return
   try {
     s.value = await getSpotSummary(props.spotId)
+    if (s.value?.offline) return // 離線：只有地圖上次載入的基本資料
     animals.value = await listSpotAnimals(props.spotId)
     pending.value = auth.user ? (await getPendingCleanups()).filter((p) => p.spot_id === props.spotId) : []
     alert.value = auth.user ? await checkSpotAlert(props.spotId) : null
-  } catch (e) { showToast(e.message) }
+  } catch (e) { showToast(isNetworkError(e) ? '目前沒有網路，無法載入這個餵食點' : e.message) }
 }
 watch(() => [props.spotId, props.refreshKey, auth.user?.id], load, { immediate: true })
 
@@ -36,15 +38,20 @@ async function startFeed() {
     if (r?.length) {
       await showConfirmDialog({ title: '最近已有人餵過', message: `${r[0].fed_by_name || '有人'} ${r[0].minutes_ago} 分鐘前餵過，確定要再餵一次嗎？` })
     }
-  } catch (e) { if (e?.message) return showToast(e.message); return }
+  } catch (e) {
+    // 使用者在「最近已有人餵過」按取消時 e 不是錯誤物件；離線查不到最近紀錄就直接讓他記
+    if (!(e instanceof Error) && !e?.message) return
+    if (!isNetworkError(e)) return showToast(e.message)
+  }
   showFeed.value = true
 }
 async function submitFeed() {
   busy.value = true
   try {
-    await recordFeeding(props.spotId, food.value, note.value)
+    const r = await recordFeeding(props.spotId, food.value, note.value)
     showFeed.value = false; note.value = ''
-    showToast('已記錄餵食，30 分鐘後別忘了回報清理')
+    showToast(r.queued ? { message: '目前沒有網路，已先存在手機，恢復連線後會自動補傳', duration: 3500 } : '已記錄餵食，30 分鐘後別忘了回報清理')
+    if (r.queued) return
     await load(); emit('changed')
   } catch (e) { showToast(e.message) } finally { busy.value = false }
 }
@@ -72,6 +79,7 @@ const cover = (a) => {
     <p>動物 {{ s.animal_count }} 隻・<b class="ster">已結紮 {{ s.sterilized_count }} 隻</b></p>
     <p>近 30 天清理率：{{ s.clean_rate_30d == null ? '尚無資料' : Math.round(s.clean_rate_30d * 100) + '%' }}
       <span v-if="s.feedings_30d != null">（{{ s.cleaned_30d }}/{{ s.feedings_30d }} 次）</span></p>
+    <p v-if="s.offline" class="hint">目前離線，顯示的是上次載入的資料。仍然可以記錄餵食，恢復連線後會自動補傳。</p>
     <p v-if="s.is_fuzzed" class="hint">訪客僅顯示大約位置，登入後可看精確位置</p>
 
     <van-notice-bar v-for="p in pending" :key="p.log_id" wrapable :scrollable="false" left-icon="brush-o">
