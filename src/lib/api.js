@@ -143,3 +143,73 @@ export async function setZoneStatus(id, status) {
   if (error) throw error
   if (!data.length) throw new Error('只有管理員可以修改保育熱區')
 }
+
+// ---------- 階段 3：匿名通報、收件匣、進度公開 ----------
+export const REPORT_CATEGORY = { mess: '環境髒亂', noise: '噪音', gathering: '動物聚集', timing: '餵食時間不當', other: '其他' }
+export const REPORT_STATUS = { open: ['待處理', 'danger'], acknowledged: ['處理中', 'warning'], resolved: ['已處理', 'success'] }
+
+export const submitReport = (spotId, category, description, token) =>
+  rpc('submit_neighbor_report', { p_spot_id: spotId, p_category: category, p_description: description, p_turnstile_token: token || null })
+export async function reportCaptchaRequired() {
+  try { return !!(await rpc('report_captcha_required')) } catch { return false }
+}
+/** 公開的通報處理進度（不含通報內容）。資料庫還沒套用階段 3 時回空陣列 */
+export async function getSpotPublicReports(spotId) {
+  if (!supabase) return []
+  try { return await rpc('get_spot_public_reports', { p_spot_id: spotId }) } catch (e) { console.warn('通報進度載入失敗', e); return [] }
+}
+/** 我照顧的點收到的通報（管理員為全部）。失敗時回空陣列，不影響地圖 */
+export async function getReportInbox({ silent = false } = {}) {
+  if (!supabase) return []
+  try { return await rpc('get_my_report_inbox') } catch (e) { if (!silent) throw e; return [] }
+}
+export const handleReport = (id, status, response) =>
+  rpc('handle_neighbor_report', { p_report_id: id, p_status: status, p_response: response || null })
+
+// ---------- 階段 3：交流空間 ----------
+export async function listPosts() {
+  const { data, error } = await need().from('posts')
+    .select('id,title,body,status,created_at,author_id,author:profiles(display_name),comments(count)')
+    .order('created_at', { ascending: false }).limit(100)
+  if (error) throw error
+  return data
+}
+export async function getPost(id) {
+  const { data, error } = await need().from('posts')
+    .select('id,title,body,status,created_at,author_id,author:profiles(display_name)').eq('id', id).maybeSingle()
+  if (error) throw error
+  return data
+}
+export async function listComments(postId) {
+  const { data, error } = await need().from('comments')
+    .select('id,body,status,created_at,author_id,author:profiles(display_name)').eq('post_id', postId).order('created_at')
+  if (error) throw error
+  return data
+}
+export async function createPost(title, body) {
+  const { data, error } = await need().from('posts').insert({ title, body }).select('id').single()
+  if (error) throw error
+  return data.id
+}
+export async function createComment(postId, body) {
+  const { error } = await need().from('comments').insert({ post_id: postId, body })
+  if (error) throw error
+}
+export async function deletePost(id) {
+  const { data, error } = await need().from('posts').delete().eq('id', id).select('id')
+  if (error) throw error
+  if (!data.length) throw new Error('只有作者或管理員可以刪除')
+}
+export async function deleteComment(id) {
+  const { data, error } = await need().from('comments').delete().eq('id', id).select('id')
+  if (error) throw error
+  if (!data.length) throw new Error('只有作者或管理員可以刪除')
+}
+/** 檢舉貼文或留言；重複檢舉會提示已檢舉過 */
+export async function flagContent(target, reason) {
+  const { error } = await need().from('content_flags').insert({ ...target, reason })
+  if (error?.code === '23505') throw new Error('你已經檢舉過這則內容')
+  if (error) throw error
+}
+export const adminListFlags = () => rpc('admin_list_flags')
+export const moderateContent = (type, id, hide) => rpc('moderate_content', { p_target_type: type, p_target_id: id, p_hide: hide })

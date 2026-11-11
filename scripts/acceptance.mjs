@@ -272,6 +272,72 @@ if (admin) {
   }
 }
 
+// ---------- 階段 3：匿名通報、收件匣、進度公開、交流空間 ----------
+{
+  const probe = await guest.rpc('report_captcha_required')
+  if (probe.error) console.log('⚠️  資料庫還沒套用階段 3 的 migration（20261111000700），略過階段 3 測試：' + probe.error.message)
+  else {
+    const limited = (r) => !!r.error && /頻繁|10 分鐘|最多|太多/.test(r.error.message)
+    ok('訪客不能直接讀 neighbor_reports', denied(await guest.from('neighbor_reports').select('id')))
+    ok('訪客不能繞過 RPC 直接寫通報', denied(await guest.from('neighbor_reports').insert({ spot_id: spotId, category: 'mess', description: '直接寫表的通報', ip_hash: 'x' }).select()))
+    ok('說明太短的通報被擋下', !!(await guest.rpc('submit_neighbor_report', { p_spot_id: spotId, p_category: 'mess', p_description: '短' })).error)
+    let rid = null
+    if (probe.data === true) console.log('⚠️  已啟用 Turnstile，腳本無法取得有效 token，略過需要送出通報的項目')
+    else {
+      const r1 = await guest.rpc('submit_neighbor_report', { p_spot_id: spotId, p_category: 'mess', p_description: 'QA 驗收：飼料盒沒有收' })
+      // 同一個網路 1 小時內跑第二次驗收時，第一則就會被頻率限制擋下，這也算正確行為
+      if (limited(r1)) console.log('⚠️  這個網路剛剛才通報過，第一則就被頻率限制擋下（1 小時後重跑可測完整流程）')
+      else { rid = r1.data; ok('沒登入的居民可以送出通報', !r1.error && !!rid, msg(r1)) }
+      const r2 = await guest.rpc('submit_neighbor_report', { p_spot_id: spotId, p_category: 'noise', p_description: 'QA 驗收：馬上再送一次' })
+      ok('短時間重複送出會被擋', limited(r2), msg(r2))
+    }
+    if (rid) {
+      const inU = await user.c.rpc('get_my_report_inbox')
+      ok('無關的使用者收件匣沒有這則通報', !inU.error && !inU.data.some((x) => x.id === rid), msg(inU))
+      ok('無關的使用者查不到通報內容', denied(await user.c.from('neighbor_reports').select('id,description').eq('id', rid)))
+      ok('無關的使用者不能處理通報', !!(await user.c.rpc('handle_neighbor_report', { p_report_id: rid, p_status: 'resolved' })).error)
+      const inC = await care.c.rpc('get_my_report_inbox')
+      ok('照顧者的收件匣收到通報內容', inC.data?.some((x) => x.id === rid && x.description.includes('飼料盒')), msg(inC))
+      ok('讀不到 ip_hash 欄位', !!(await care.c.from('neighbor_reports').select('ip_hash').eq('id', rid)).error)
+      ok('照顧者可回覆並標記已處理', !(await care.c.rpc('handle_neighbor_report', { p_report_id: rid, p_status: 'resolved', p_response: 'QA 已清理' })).error)
+      const pub = await guest.rpc('get_spot_public_reports', { p_spot_id: spotId })
+      const row = pub.data?.find((x) => x.id === rid)
+      ok('訪客看得到處理狀態與回覆，看不到通報內容', row?.status === 'resolved' && row.response === 'QA 已清理' && !('description' in row) && !('ip_hash' in row), msg(pub))
+    }
+
+    // 交流空間
+    ok('訪客不能讀貼文', denied(await guest.from('posts').select('id')))
+    const p = await user.c.from('posts').insert({ title: 'QA 驗收貼文', body: '測試內容' }).select('id,author_id,status').single()
+    if (p.error && /最多/.test(p.error.message)) console.log('⚠️  測試帳號 1 小時內發文已達上限，略過交流空間測試')
+    else {
+      const pid = p.data?.id
+      ok('登入者可發文，作者自動帶入', p.data?.author_id === user.id && p.data.status === 'visible', msg(p))
+      ok('不能冒名發文', denied(await user.c.from('posts').insert({ title: 'x', body: 'y', author_id: owner.id }).select()))
+      const lp = await care.c.from('posts').select('id,title,author:profiles(display_name),comments(count)').eq('id', pid)
+      ok('前端「貼文列表」查詢正常（含作者暱稱與留言數）', !lp.error && lp.data.length === 1 && !!lp.data[0].author?.display_name && lp.data[0].comments?.[0]?.count === 0, msg(lp))
+      ok('登入者可留言', !(await care.c.from('comments').insert({ post_id: pid, body: 'QA 留言' })).error)
+      ok('不能改別人的貼文', denied(await care.c.from('posts').update({ body: 'hacked' }).eq('id', pid).select('id')))
+      ok('不能刪別人的貼文', denied(await care.c.from('posts').delete().eq('id', pid).select('id')))
+      ok('一般使用者不能自己隱藏貼文', denied(await care.c.from('posts').update({ status: 'hidden' }).eq('id', pid).select('id')))
+      ok('登入者可檢舉', !(await care.c.from('content_flags').insert({ post_id: pid, reason: 'QA 檢舉' })).error)
+      ok('同一人不能重複檢舉', (await care.c.from('content_flags').insert({ post_id: pid, reason: '再一次' })).error?.code === '23505')
+      ok('一般使用者不能看檢舉清單', !!(await care.c.rpc('admin_list_flags')).error)
+      ok('一般使用者不能處理檢舉', !!(await care.c.rpc('moderate_content', { p_target_type: 'post', p_target_id: pid, p_hide: true })).error)
+      const isAdm = admin && (await admin.c.from('profiles').select('role').eq('id', admin.id).single()).data?.role === 'admin'
+      if (isAdm) {
+        const fl = await admin.c.rpc('admin_list_flags')
+        ok('管理員看得到檢舉清單', fl.data?.some((x) => x.target_id === pid && x.flag_count === 1), msg(fl))
+        ok('管理員可隱藏被檢舉的貼文', !(await admin.c.rpc('moderate_content', { p_target_type: 'post', p_target_id: pid, p_hide: true })).error)
+        const hid = await care.c.from('posts').select('id').eq('id', pid)
+        ok('被隱藏的貼文其他人看不到', !hid.error && hid.data.length === 0, msg(hid))
+        const own = await user.c.from('posts').select('status').eq('id', pid).single()
+        ok('作者看得到自己的貼文被隱藏', own.data?.status === 'hidden', msg(own))
+      }
+      ok('作者可刪除自己的貼文', allowed(await user.c.from('posts').delete().eq('id', pid).select('id')))
+    }
+  }
+}
+
 // ---------- 收尾 ----------
 {
   ok('建檔者可刪自己的動物', allowed(await user.c.from('animals').delete().eq('id', animalId).select('id')))

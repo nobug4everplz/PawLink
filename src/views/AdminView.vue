@@ -7,7 +7,7 @@ import { showToast, showConfirmDialog } from 'vant'
 import { auth } from '../lib/auth'
 import {
   adminListUsers, setUserRole, adminListSpots, adminSetSpotOwner, setSpotStatus,
-  adminListZones, setZoneStatus, deleteZone,
+  adminListZones, setZoneStatus, deleteZone, adminListFlags, moderateContent,
 } from '../lib/api'
 
 const route = useRoute(), router = useRouter()
@@ -24,7 +24,12 @@ async function run(fn, okMsg) {
 const loadUsers = () => run(async () => { users.value = await adminListUsers(userQ.value) })
 const loadZones = () => run(async () => { zones.value = await adminListZones() })
 const loadSpots = () => run(async () => { spots.value = await adminListSpots(spotQ.value) })
-onMounted(() => { loadUsers(); loadZones(); loadSpots() })
+const flags = ref([])
+const loadFlags = () => run(async () => { flags.value = await adminListFlags() })
+async function moderate(f, hide) {
+  await run(async () => { await moderateContent(f.target_type, f.target_id, hide); await loadFlags() }, hide ? '已隱藏內容' : '已駁回檢舉，內容恢復顯示')
+}
+onMounted(() => { loadUsers(); loadZones(); loadSpots(); loadFlags() })
 
 // ---------- 使用者 ----------
 async function toggleRole(u) {
@@ -134,6 +139,28 @@ const day = (t) => new Date(t).toLocaleDateString('zh-TW')
       </van-cell-group>
       <van-empty v-if="!spots.length && !loading" description="沒有符合的餵食點" />
     </van-tab>
+    <van-tab title="檢舉" name="flags" :badge="flags.length || ''">
+      <van-cell-group inset style="margin-top:12px">
+        <van-cell v-for="f in flags" :key="f.target_id" class="flag">
+          <template #title>
+            <van-tag plain>{{ f.target_type === 'post' ? '貼文' : '留言' }}</van-tag>
+            <b style="margin-left:6px">{{ f.title }}</b>
+            <van-tag v-if="f.content_status === 'hidden'" type="warning" style="margin-left:6px">已自動隱藏</van-tag>
+          </template>
+          <template #label>
+            <div class="excerpt">{{ f.excerpt }}</div>
+            <div>作者：{{ f.author_name || '已離開的使用者' }}・{{ f.flag_count }} 人檢舉：{{ f.reasons }}</div>
+            <div class="fbtns">
+              <van-button size="small" type="danger" :disabled="loading" @click="moderate(f, true)">隱藏內容</van-button>
+              <van-button size="small" plain :disabled="loading" @click="moderate(f, false)">駁回檢舉</van-button>
+              <van-button size="small" plain type="primary" @click="router.push({ name: 'post', params: { id: f.post_id } })">查看</van-button>
+            </div>
+          </template>
+        </van-cell>
+      </van-cell-group>
+      <van-empty v-if="!flags.length && !loading" description="沒有待處理的檢舉" />
+      <p class="tip">同一則內容被 3 個人檢舉會先自動隱藏。「隱藏內容」會讓它只剩作者與管理員看得到；「駁回檢舉」會恢復顯示。</p>
+    </van-tab>
   </van-tabs>
 
   <van-action-sheet v-model:show="showAct" :title="act?.name" :actions="actions()" cancel-text="取消" @select="onAction" />
@@ -151,6 +178,8 @@ const day = (t) => new Date(t).toLocaleDateString('zh-TW')
 .bar { margin: 12px 16px; }
 .tip { margin: 12px 20px 24px; color: #999; font-size: 12px; line-height: 1.6; }
 .ph { margin: 16px 16px 4px; }
+.excerpt { color: #333; margin: 6px 0; white-space: pre-wrap; }
+.fbtns { display: flex; gap: 8px; margin-top: 8px; }
 :deep(.van-cell__value) { flex: none; display: flex; gap: 4px; align-items: center; }
 :deep(.van-cell__title) { flex: 1; min-width: 0; }
 </style>

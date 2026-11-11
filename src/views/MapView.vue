@@ -6,7 +6,7 @@ import 'leaflet.markercluster'
 import { showToast } from 'vant'
 import { auth, signOut, isAdmin } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
-import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones } from '../lib/api'
+import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones, getReportInbox } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
 import SpotPanel from '../components/SpotPanel.vue'
 
@@ -18,6 +18,7 @@ const refreshKey = ref(0)
 const pending = ref([]) // 我還沒回報清理的餵食（餵食後 30 分鐘～24 小時）
 let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer
 const zoneCount = ref(0)
+const openReports = ref(0) // 我照顧的點還沒處理完的居民通報
 let spots = []
 
 async function loadSpots() {
@@ -48,6 +49,10 @@ function select(id) { selectedId.value = id; showPanel.value = true }
 async function loadPending() {
   if (!auth.user) { pending.value = []; return }
   try { pending.value = await getPendingCleanups() } catch { /* 提醒載入失敗不影響地圖 */ }
+}
+async function loadInbox() {
+  if (!auth.user) { openReports.value = 0; return }
+  openReports.value = (await getReportInbox({ silent: true })).filter((r) => r.status === 'open').length
 }
 function onChanged() { loadSpots(); loadPending() }
 /** 點清理提醒：跳到最早一筆未清理的餵食點並開啟面板 */
@@ -97,11 +102,11 @@ onMounted(() => {
       .catch(() => loadSpots())
   } else loadSpots()
   unsub = subscribeFeeding(() => { loadSpots(); loadPending(); refreshKey.value++ })
-  loadPending()
-  pendingTimer = setInterval(loadPending, 5 * 60e3)
+  loadPending(); loadInbox()
+  pendingTimer = setInterval(() => { loadPending(); loadInbox() }, 5 * 60e3)
 })
 onBeforeUnmount(() => { unsub?.(); clearInterval(pendingTimer); map?.remove() })
-watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending() } })
+watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending(); loadInbox() } })
 </script>
 
 <template>
@@ -115,9 +120,13 @@ watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending() } })
       <van-button v-else size="small" round plain @click="signOut">{{ auth.profile?.display_name || '已登入' }}・登出</van-button>
     </div>
     <div class="links" :class="{ shifted: pending.length }">
-      <van-button size="small" round plain type="success" icon="flower-o" @click="router.push({ name: 'conservation' })">保育宣導</van-button>
-      <van-button v-if="isAdmin()" size="small" round plain type="danger" icon="setting-o" @click="router.push({ name: 'admin' })">管理後台</van-button>
+      <van-button size="small" round plain type="success" icon="flower-o" @click="router.push({ name: 'conservation' })">保育</van-button>
+      <van-button v-if="auth.user" size="small" round plain type="primary" icon="chat-o" @click="router.push({ name: 'community' })">交流</van-button>
+      <van-button v-if="isAdmin()" size="small" round plain type="danger" icon="setting-o" @click="router.push({ name: 'admin' })">後台</van-button>
     </div>
+    <van-badge v-if="auth.user" :content="openReports || ''" :show-zero="false" class="inbox" :class="{ shifted: pending.length }">
+      <van-button size="small" round plain icon="envelop-o" @click="router.push({ name: 'inbox' })">居民通報</van-button>
+    </van-badge>
     <div v-if="zoneCount" class="legend"><i class="red" />保育熱區<i class="yellow" />200 公尺警示帶</div>
     <div class="fabs">
       <van-button round icon="aim" type="primary" class="fab" @click="locate" />
@@ -134,6 +143,9 @@ watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending() } })
 .map { height: 100%; }
 .top { position: absolute; top: 12px; right: 12px; z-index: 1000; background: #fff; border-radius: 16px; }
 .top.shifted, .links.shifted { top: 52px; }
+.inbox { position: absolute; top: 52px; left: 12px; z-index: 1000; }
+.inbox.shifted { top: 92px; }
+.inbox .van-button { background: #fff; }
 .links { position: absolute; top: 12px; left: 12px; z-index: 1000; display: flex; gap: 8px; }
 .links .van-button { background: #fff; }
 .legend { position: absolute; left: 12px; bottom: 28px; z-index: 1000; background: rgba(255,255,255,.92); border-radius: 8px; padding: 4px 10px; font-size: 12px; color: #444; display: flex; align-items: center; gap: 4px; }
