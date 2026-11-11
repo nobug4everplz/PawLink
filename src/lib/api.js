@@ -1,5 +1,8 @@
 import { supabase } from './supabase'
 import { mockSpots } from './mockSpots'
+import { auth } from './auth'
+import { enqueueFeeding, isNetworkError } from './offlineQueue'
+import { cachedSpot } from './spots'
 
 function need() {
   if (!supabase) throw new Error('尚未設定 Supabase（請填 .env）')
@@ -16,8 +19,15 @@ export async function getSpotSummary(id) {
     const s = mockSpots.find((x) => x.id === id)
     return { ...s, description: null, is_caretaker: false, feedings_30d: 0, cleaned_30d: 0, caretaker_count: 0 }
   }
-  const rows = await rpc('get_spot_summary', { p_spot_id: id })
-  return Array.isArray(rows) ? rows[0] : rows
+  try {
+    const rows = await rpc('get_spot_summary', { p_spot_id: id })
+    return Array.isArray(rows) ? rows[0] : rows
+  } catch (e) {
+    // 離線時用地圖上次載入的資料頂著，至少看得到名稱、能記錄餵食
+    const c = isNetworkError(e) ? cachedSpot(id) : null
+    if (c) return { ...c, description: null, is_caretaker: true, offline: true }
+    throw e
+  }
 }
 export const findNearbySpots = (lat, lng) => rpc('find_nearby_spots', { p_lat: lat, p_lng: lng })
 export const createSpot = (name, lat, lng, description) =>
@@ -27,8 +37,22 @@ export async function joinSpot(spotId, userId) {
   if (error && error.code !== '23505') throw error
 }
 export const checkRecentFeeding = (spotId) => rpc('check_recent_feeding', { p_spot_id: spotId })
-export const recordFeeding = (spotId, foodType, note) =>
-  rpc('record_feeding', { p_spot_id: spotId, p_food_type: foodType, p_note: note || null, p_client_id: crypto.randomUUID() })
+/**
+ * 記錄餵食。沒有網路時先存在手機，回傳 { queued: true }，恢復連線後由 offlineQueue 補傳。
+ * client_id 在這裡就產生：就算請求其實有送到、只是回應沒收到，補傳時伺服器也會認出是同一筆。
+ */
+export async function recordFeeding(spotId, foodType, note) {
+  const item = { client_id: crypto.randomUUID(), spot_id: spotId, food_type: foodType, note: note || null, fed_at: new Date().toISOString(), user_id: auth.user?.id }
+  const queue = async () => { await enqueueFeeding(item); return { queued: true } }
+  if (supabase && auth.user && !navigator.onLine) return queue()
+  try {
+    await rpc('record_feeding', { p_spot_id: spotId, p_food_type: foodType, p_note: item.note, p_fed_at: item.fed_at, p_client_id: item.client_id })
+    return { queued: false }
+  } catch (e) {
+    if (auth.user && isNetworkError(e)) return queue()
+    throw e
+  }
+}
 export const reportCleanup = (logId) => rpc('report_cleanup', { p_log_id: logId })
 export const getPendingCleanups = () => rpc('get_my_pending_cleanups')
 

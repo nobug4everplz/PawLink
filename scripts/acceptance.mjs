@@ -192,11 +192,11 @@ let animalId
 // ---------- Realtime ----------
 {
   const got = await new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(false), 15000)
+    const timer = setTimeout(() => resolve(false), 25000)
     const ch = owner.c.channel('qa-feeding')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'feeding_logs' }, (p) => { if (p.new?.spot_id === spotId) { clearTimeout(timer); resolve(true) } })
-      // SUBSCRIBED 之後資料庫端的監聽還要一點時間才生效，稍等再寫入
-      .subscribe((st) => { if (st === 'SUBSCRIBED') setTimeout(async () => { await care.c.rpc('record_feeding', { p_spot_id: spotId, p_food_type: 'dry' }) }, 1500) })
+      // SUBSCRIBED 之後資料庫端的監聽還要幾秒才生效（等 1.5 秒時約三次有一次收不到），等 4 秒再寫入
+      .subscribe((st) => { if (st === 'SUBSCRIBED') setTimeout(async () => { await care.c.rpc('record_feeding', { p_spot_id: spotId, p_food_type: 'dry' }) }, 4000) })
     void ch
   })
   ok('即時同步：A 記錄餵食，B 的連線收到事件', got)
@@ -288,8 +288,14 @@ if (admin) {
       // 同一個網路 1 小時內跑第二次驗收時，第一則就會被頻率限制擋下，這也算正確行為
       if (limited(r1)) console.log('⚠️  這個網路剛剛才通報過，第一則就被頻率限制擋下（1 小時後重跑可測完整流程）')
       else { rid = r1.data; ok('沒登入的居民可以送出通報', !r1.error && !!rid, msg(r1)) }
-      const r2 = await guest.rpc('submit_neighbor_report', { p_spot_id: spotId, p_category: 'noise', p_description: 'QA 驗收：馬上再送一次' })
-      ok('短時間重複送出會被擋', limited(r2), msg(r2))
+      // 限制是「同一個來源 IP」。執行環境若經過多個出口 IP（雲端主機、代理），前幾次可能各算各的，
+      // 所以連送幾次，只要在出口 IP 用完之前被擋下就算通過；一般手機或家用網路第 2 次就會被擋。
+      let blockedAt = 0, last
+      for (let i = 2; i <= 5 && !blockedAt; i++) {
+        last = await guest.rpc('submit_neighbor_report', { p_spot_id: spotId, p_category: 'noise', p_description: `QA 驗收：馬上再送第 ${i} 次` })
+        if (limited(last)) blockedAt = i
+      }
+      ok('短時間重複送出會被擋', blockedAt > 0, blockedAt ? `第 ${blockedAt} 次送出被擋：${last.error.message}` : msg(last))
     }
     if (rid) {
       const inU = await user.c.rpc('get_my_report_inbox')

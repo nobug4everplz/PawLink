@@ -10,6 +10,7 @@ const router = createRouter({
     { path: '/spots/new', name: 'spot-new', component: () => import('../views/SpotNewView.vue'), meta: { auth: true } },
     { path: '/spots/:id/animals/new', name: 'animal-new', component: () => import('../views/AnimalNewView.vue'), meta: { auth: true } },
     { path: '/animals/:id', name: 'animal', component: () => import('../views/AnimalView.vue') },
+    { path: '/install', name: 'install', component: () => import('../views/InstallView.vue') },
     { path: '/conservation', name: 'conservation', component: () => import('../views/ConservationView.vue') },
     { path: '/spots/:id/report', name: 'spot-report', component: () => import('../views/ReportView.vue') },
     { path: '/spots/:id/progress', name: 'spot-progress', component: () => import('../views/SpotProgressView.vue') },

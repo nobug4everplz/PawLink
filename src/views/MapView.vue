@@ -1,11 +1,11 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import L from 'leaflet'
-import 'leaflet.markercluster'
+import L, { loadCluster } from '../lib/leaflet'
 import { showToast } from 'vant'
 import { auth, signOut, isAdmin } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
+import { net, flushQueue, onFlushed, refreshQueueCount } from '../lib/offlineQueue'
 import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones, getReportInbox } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
 import SpotPanel from '../components/SpotPanel.vue'
@@ -16,7 +16,9 @@ const selectedId = ref(null)
 const showPanel = ref(false)
 const refreshKey = ref(0)
 const pending = ref([]) // 我還沒回報清理的餵食（餵食後 30 分鐘～24 小時）
-let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer
+let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer, offFlushed
+const showingCached = ref(false)
+const showInstall = ref(false)
 const zoneCount = ref(0)
 const openReports = ref(0) // 我照顧的點還沒處理完的居民通報
 let spots = []
@@ -24,6 +26,7 @@ let spots = []
 async function loadSpots() {
   try {
     spots = await fetchMapSpots(map.getBounds())
+    showingCached.value = !!spots.offline
     cluster.clearLayers()
     for (const s of spots) {
       const m = L.marker([s.lat, s.lng], { icon: footprintIcon(s.footprint) })
@@ -31,6 +34,12 @@ async function loadSpots() {
       cluster.addLayer(m)
     }
   } catch (e) { showToast('載入餵食點失敗：' + e.message) }
+}
+/** 手動補傳離線紀錄 */
+async function flushNow() {
+  if (!net.online) return showToast('還沒有網路，恢復連線後會自動補傳')
+  const r = await flushQueue()
+  if (!r.sent && !r.dropped.length && net.count) showToast('還連不上伺服器，稍後會再試')
 }
 /** 保育熱區：紅色為範圍、黃色虛線為 200 公尺警示帶。不攔截點擊，長按建點照常可用 */
 async function loadZones() {
@@ -75,7 +84,9 @@ function addSpotAt(latlng) {
 /** 以 GPS 位置新增：沒有定位就用地圖中心 */
 function addHere() { addSpotAt(meMarker ? meMarker.getLatLng() : map.getCenter()) }
 
-onMounted(() => {
+onMounted(async () => {
+  await loadCluster()
+  if (!mapEl.value) return // 外掛載入期間已離開頁面
   map = L.map(mapEl.value, { zoomControl: false }).setView([25.0174, 121.5398], 15)
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map)
   cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 50 })
@@ -103,10 +114,20 @@ onMounted(() => {
   } else loadSpots()
   unsub = subscribeFeeding(() => { loadSpots(); loadPending(); refreshKey.value++ })
   loadPending(); loadInbox()
+  offFlushed = onFlushed(({ sent, dropped }) => {
+    if (sent) showToast(`已補傳 ${sent} 筆離線餵食紀錄`)
+    if (dropped.length) showToast({ message: `有 ${dropped.length} 筆離線紀錄無法補傳：${dropped[0].reason}`, duration: 5000 })
+    loadSpots(); loadPending(); refreshKey.value++
+  })
+  // 還沒加入主畫面、也沒看過提示的人，顯示一次安裝提示
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone
+  try { showInstall.value = !standalone && !localStorage.getItem('pawlink:install-tip') } catch { /* ignore */ }
   pendingTimer = setInterval(() => { loadPending(); loadInbox() }, 5 * 60e3)
 })
-onBeforeUnmount(() => { unsub?.(); clearInterval(pendingTimer); map?.remove() })
-watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending(); loadInbox() } })
+function dismissInstall() { showInstall.value = false; try { localStorage.setItem('pawlink:install-tip', '1') } catch { /* ignore */ } }
+onBeforeUnmount(() => { unsub?.(); offFlushed?.(); clearInterval(pendingTimer); map?.remove() })
+watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending(); loadInbox(); refreshQueueCount().then(() => flushQueue()) } })
+watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
 </script>
 
 <template>
@@ -127,6 +148,15 @@ watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending(); loadIn
     <van-badge v-if="auth.user" :content="openReports || ''" :show-zero="false" class="inbox" :class="{ shifted: pending.length }">
       <van-button size="small" round plain icon="envelop-o" @click="router.push({ name: 'inbox' })">居民通報</van-button>
     </van-badge>
+    <div v-if="!net.online || net.count || showingCached" class="offline" @click="flushNow">
+      <van-icon :name="net.online ? 'upgrade' : 'warning-o'" />
+      <span v-if="net.count">{{ net.flushing ? '補傳中…' : `有 ${net.count} 筆餵食紀錄待補傳` }}{{ net.online ? '，點這裡立刻補傳' : '，恢復連線後自動補傳' }}</span>
+      <span v-else>目前離線，顯示上次載入的餵食點。仍可記錄餵食</span>
+    </div>
+    <div v-if="showInstall" class="install">
+      <span @click="router.push({ name: 'install' })">📲 加入主畫面，像 App 一樣使用 ›</span>
+      <van-icon name="cross" @click="dismissInstall" />
+    </div>
     <div v-if="zoneCount" class="legend"><i class="red" />保育熱區<i class="yellow" />200 公尺警示帶</div>
     <div class="fabs">
       <van-button round icon="aim" type="primary" class="fab" @click="locate" />
@@ -148,6 +178,8 @@ watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending(); loadIn
 .inbox .van-button { background: #fff; }
 .links { position: absolute; top: 12px; left: 12px; z-index: 1000; display: flex; gap: 8px; }
 .links .van-button { background: #fff; }
+.offline { position: absolute; left: 12px; right: 76px; bottom: 64px; z-index: 1000; background: #323233; color: #fff; border-radius: 10px; padding: 8px 12px; font-size: 13px; display: flex; gap: 8px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+.install { position: absolute; left: 12px; right: 76px; bottom: 112px; z-index: 1000; background: #fff; color: #1f7a50; border-radius: 10px; padding: 8px 12px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
 .legend { position: absolute; left: 12px; bottom: 28px; z-index: 1000; background: rgba(255,255,255,.92); border-radius: 8px; padding: 4px 10px; font-size: 12px; color: #444; display: flex; align-items: center; gap: 4px; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 4px; }
 .legend i.red { background: rgba(224,62,62,.45); border: 1px solid #e03e3e; }

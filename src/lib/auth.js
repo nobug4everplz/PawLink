@@ -31,4 +31,8 @@ export async function signUp(email, password, displayName) {
   if (error) throw error
   return data // data.session 為 null 代表需要先收信驗證
 }
-export async function signOut() { await supabase.auth.signOut() }
+export async function signOut() {
+  // 登入者拿到的是精確位置，登出後不留在這支手機上
+  try { localStorage.removeItem('pawlink:spots') } catch { /* ignore */ }
+  await supabase.auth.signOut()
+}
