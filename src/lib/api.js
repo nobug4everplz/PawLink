@@ -58,8 +58,19 @@ export async function createAnimal(spotId, fields) {
 }
 // tnr_updated_at 由資料庫 trigger 自動更新，前端沒有該欄位的寫入權，不可一併送出
 export async function updateTnrStage(animalId, stage) {
-  const { error } = await need().from('animals').update({ tnr_stage: stage }).eq('id', animalId)
+  const { data, error } = await need().from('animals').update({ tnr_stage: stage }).eq('id', animalId).select('id')
   if (error) throw error
+  // 沒有權限時 RLS 不會回錯誤，只是更新 0 筆
+  if (!data.length) throw new Error('只有建立者、該餵食點的照顧者或管理員可以更新')
+}
+/** 目前登入者能不能編輯這隻動物（與資料庫 can_edit_animal 規則一致，僅用於介面顯示） */
+export async function canEditAnimal(animal, user, isAdmin) {
+  if (!user) return false
+  if (isAdmin || animal.created_by === user.id) return true
+  const spotIds = (animal.spot_animals || []).map((x) => x.spot_id)
+  if (!spotIds.length) return false
+  const { data } = await need().from('spot_caretakers').select('spot_id').eq('user_id', user.id).in('spot_id', spotIds).limit(1)
+  return !!data?.length
 }
 export async function uploadAnimalPhoto(animalId, blob) {
   const ext = blob.type === 'image/jpeg' ? 'jpg' : 'webp'
