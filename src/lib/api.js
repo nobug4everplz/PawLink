@@ -269,3 +269,16 @@ export const cancelShift = (id) => rpc('cancel_shift', { p_shift_id: id })
 export const requestShiftCover = (id, need = true) => rpc('request_shift_cover', { p_shift_id: id, p_need: need })
 export const claimShift = (id) => rpc('claim_shift', { p_shift_id: id })
 export const completeShift = (id) => rpc('complete_shift', { p_shift_id: id })
+
+// ---------- 階段 5 延伸三：TNR 接力（FR-5.2） ----------
+export const TNR_STEP = { trap: '誘捕', vet: '送醫手術', recovery: '術後照顧', release: '原地放回' }
+/** 帶 animalId：這隻動物最近一個案件的四個任務；不帶：所有進行中案件。還沒套用資料庫時回傳 null */
+export async function getTnrTasks(animalId, { silent = false } = {}) {
+  if (!supabase) return silent ? [] : null
+  try { return await rpc('get_tnr_tasks', { p_animal_id: animalId || null }) } catch (e) { if (silent) return []; if (e.code === 'PGRST202') return null; throw e }
+}
+export const openTnrCase = (animalId, note) => rpc('open_tnr_case', { p_animal_id: animalId, p_note: note || null })
+export const cancelTnrCase = (caseId) => rpc('cancel_tnr_case', { p_case_id: caseId })
+export const claimTnrTask = (taskId) => rpc('claim_tnr_task', { p_task_id: taskId })
+export const unclaimTnrTask = (taskId) => rpc('unclaim_tnr_task', { p_task_id: taskId })
+export const completeTnrTask = (taskId, note) => rpc('complete_tnr_task', { p_task_id: taskId, p_note: note || null })

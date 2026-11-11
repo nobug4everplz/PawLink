@@ -6,7 +6,7 @@ import { showToast } from 'vant'
 import { auth, signOut, isAdmin } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
 import { net, flushQueue, onFlushed, refreshQueueCount } from '../lib/offlineQueue'
-import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones, getReportInbox, getAnimalAlerts, getShifts } from '../lib/api'
+import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones, getReportInbox, getAnimalAlerts, getShifts, getTnrTasks } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
 import SpotPanel from '../components/SpotPanel.vue'
 
@@ -20,6 +20,7 @@ let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer, zoneBounds, o
 const showingCached = ref(false)
 const showInstall = ref(false)
 const zoneCount = ref(0)
+const myTnr = ref(0) // 我認領的 TNR 任務裡，現在輪到我做的
 const needCover = ref(0) // 我照顧的點有別人在求代班的班數
 const openReports = ref(0) // 我照顧的點還沒處理的居民通報，加上還沒處理的動物提醒
 let spots = []
@@ -69,10 +70,11 @@ async function loadPending() {
   try { pending.value = await getPendingCleanups() } catch { /* 提醒載入失敗不影響地圖 */ }
 }
 async function loadInbox() {
-  if (!auth.user) { openReports.value = 0; needCover.value = 0; return }
+  if (!auth.user) { openReports.value = 0; needCover.value = 0; myTnr.value = 0; return }
   const [reports, alerts] = await Promise.all([getReportInbox({ silent: true }), getAnimalAlerts({ silent: true })])
   openReports.value = reports.filter((r) => r.status === 'open').length + alerts.filter((a) => a.status === 'open').length
   needCover.value = (await getShifts({ silent: true })).filter((x) => x.can_claim).length
+  myTnr.value = (await getTnrTasks(null, { silent: true })).filter((t) => t.is_mine && t.is_ready).length
 }
 function onChanged() { loadSpots(); loadPending() }
 /** 點清理提醒：跳到最早一筆未清理的餵食點並開啟面板 */
@@ -163,6 +165,9 @@ watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
       </van-badge>
       <van-badge :content="needCover || ''" :show-zero="false" class="shifts">
         <van-button size="small" round plain icon="calendar-o" @click="router.push({ name: 'shifts' })">輪值</van-button>
+      </van-badge>
+      <van-badge :content="myTnr || ''" :show-zero="false" class="tnr">
+        <van-button size="small" round plain icon="exchange" @click="router.push({ name: 'tnr' })">接力</van-button>
       </van-badge>
     </div>
     <div v-if="!net.online || net.count || showingCached" class="offline" @click="flushNow">

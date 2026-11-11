@@ -422,6 +422,45 @@ if (admin) {
   }
 }
 
+// ---------- 階段 5 延伸三：TNR 接力 ----------
+{
+  const probe = await user.c.rpc('get_tnr_tasks', { p_animal_id: animalId })
+  if (probe.error) console.log('⚠️  資料庫還沒套用 TNR 接力的 migration（20261111001100），略過 TNR 接力測試：' + probe.error.message)
+  else {
+    const before = (await guest.from('animals').select('tnr_stage').eq('id', animalId).single()).data?.tnr_stage
+    ok('訪客不能發起 TNR 接力', !!(await guest.rpc('open_tnr_case', { p_animal_id: animalId })).error)
+    ok('訪客讀不到接力任務', denied(await guest.from('tnr_tasks').select('id')))
+    const oc = await user.c.rpc('open_tnr_case', { p_animal_id: animalId, p_note: 'QA 接力' })
+    ok('建檔者可以發起 TNR 接力', !oc.error && !!oc.data, msg(oc))
+    ok('同一隻動物同時只能有一個進行中的接力', !!(await owner.c.rpc('open_tnr_case', { p_animal_id: animalId })).error)
+    const tasks = (await user.c.rpc('get_tnr_tasks', { p_animal_id: animalId })).data || []
+    const by = Object.fromEntries(tasks.map((t) => [t.step, t]))
+    ok('發起後有四個任務，已經走過的階段直接算完成', tasks.length === 4 && tasks.every((t) => (t.step_no + 1 <= before) === (t.status === 'done')), JSON.stringify(tasks.map((t) => t.status)))
+    ok('不能繞過 RPC 直接改任務', denied(await user.c.from('tnr_tasks').update({ status: 'done' }).eq('id', by.release?.task_id).select('id')))
+    const todo = tasks.filter((t) => t.status !== 'done')
+    const last = todo[todo.length - 1]
+    // 兩個帳號同時認領最後一步
+    const [c1, c2] = await Promise.all([owner.c.rpc('claim_tnr_task', { p_task_id: last.task_id }), care.c.rpc('claim_tnr_task', { p_task_id: last.task_id })])
+    ok('兩人同時認領同一個任務只有一人成功', [c1, c2].filter((r) => !r.error).length === 1 && /已有人認領/.test([c1, c2].find((r) => r.error)?.error?.message || ''), `${msg(c1)} / ${msg(c2)}`)
+    const winner = c1.error ? care : owner, loser = c1.error ? owner : care
+    ok('不是認領者不能回報完成', !!(await loser.c.rpc('complete_tnr_task', { p_task_id: last.task_id })).error)
+    if (todo.length > 1) ok('前一步還沒完成，不能先回報後面的步驟', !!(await winner.c.rpc('complete_tnr_task', { p_task_id: last.task_id })).error)
+    let stageNow = before
+    for (const t of todo.slice(0, -1)) {
+      await loser.c.rpc('claim_tnr_task', { p_task_id: t.task_id })
+      const r = await loser.c.rpc('complete_tnr_task', { p_task_id: t.task_id })
+      ok(`完成第 ${t.step_no} 步後結紮階段自動變成 ${t.step_no + 1}`, !r.error && r.data === t.step_no + 1, msg(r))
+      stageNow = r.data
+    }
+    const fin = await winner.c.rpc('complete_tnr_task', { p_task_id: last.task_id })
+    ok('四步完成後結紮階段自動變成 5 已原地回置', !fin.error && fin.data === 5, msg(fin))
+    const after = (await guest.from('animals').select('tnr_stage,is_sterilized').eq('id', animalId).single()).data
+    const done = (await user.c.rpc('get_tnr_tasks', { p_animal_id: animalId })).data || []
+    ok('動物檔顯示已結紮並回置，案件自動結案', after?.tnr_stage === 5 && after?.is_sterilized === true && done.every((t) => t.case_status === 'done'), JSON.stringify(after))
+    ok('完成回置後不能再發起接力', !!(await user.c.rpc('open_tnr_case', { p_animal_id: animalId })).error)
+  }
+}
+
 // ---------- 收尾 ----------
 {
   ok('建檔者可刪自己的動物', allowed(await user.c.from('animals').delete().eq('id', animalId).select('id')))

@@ -1,4 +1,4 @@
-# 權限矩陣（第一～三階段、哨兵、輪值，2026-11-11 定案）
+# 權限矩陣（第一～三階段、哨兵、輪值、TNR 接力，2026-11-11 定案）
 
 設計決策（照顧者以餵食點為單位、TNR 五階段等）見 `decisions.md`。
 
@@ -73,6 +73,13 @@
 | | 求代班、取消 | ❌ | ❌ | 🔒 自己排的班 | 🔒 `cancel_shift` 可刪任何一班 |
 | | 認領代班 | ❌ | ❌ | 🔒 `claim_shift`（同點別人的班，第一位成功） | 🟡 要是該點照顧者 |
 | | 標記完成 | ❌ | ❌ | 🔒 `complete_shift`（負責這一班的人） | 🟡 同左 |
+
+| **tnr_cases**（TNR 接力） | 讀 | ❌ | ✅ | ✅ | ✅ |
+| | 發起 | ❌ | 🔒 `open_tnr_case`（自己建檔的動物） | 🔒 `open_tnr_case`（出沒在自己照顧的點的動物） | 🔒 `open_tnr_case` |
+| | 取消 | ❌ | 🔒 發起人或建檔者 | 🔒 `cancel_tnr_case` | 🔒 `cancel_tnr_case` |
+| **tnr_tasks**（TNR 接力） | 讀 | ❌ | ✅ | ✅ | ✅ |
+| | 認領 | ❌ | 🔒 `claim_tnr_task`（第一位成功） | 🔒 同左 | 🔒 同左 |
+| | 完成、放棄 | ❌ | 🔒 自己認領的任務 | 🔒 同左 | 🔒 同左 |
 
 `neighbor_reports.ip_hash`、`private.app_secrets`（IP 雜湊的鹽、Turnstile secret）與 `private.sentinel_runs`（哨兵執行紀錄）任何前端角色都讀不到；`private` 裡的表一樣開 RLS 並收回權限。
 
