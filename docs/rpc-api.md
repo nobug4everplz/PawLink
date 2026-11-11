@@ -1,4 +1,4 @@
-# 前端資料介面（第一～三階段）
+# 前端資料介面（第一～三階段與哨兵）
 
 前端用 `supabase-js`。地圖與統計一律走 RPC；其他 CRUD 直接用 `supabase.from('表')`，權限由 RLS 把關。
 
@@ -63,6 +63,20 @@
 貼文、留言、檢舉直接讀寫 `posts`、`comments`、`content_flags`，由 RLS 把關：每人 1 小時最多 5 篇貼文、30 則留言；同一則內容被 3 個人檢舉會自動隱藏。
 
 Turnstile 的設定步驟見 `docs/turnstile-setup.md`。
+
+### 階段 5 延伸一：失蹤／健康哨兵
+
+| 函式 | 誰可呼叫 | 參數 | 回傳 | 用在哪 |
+| --- | --- | --- | --- | --- |
+| `report_sighting` | 登入者 | `p_animal_id, p_condition?, p_spot_id?, p_note?, p_seen_at?` | `{ sighting_id, alert_id, missing_resolved }` | 身分檔的「回報目擊」。`alert_id` 有值表示發了健康提醒 |
+| `get_animal_sightings` | 登入者 | `p_animal_id, p_limit?` | `id, seen_at, condition, note, spot_id, spot_name, reporter_name` | 身分檔的目擊紀錄 |
+| `get_my_animal_alerts` | 登入者 | 無 | `id, type, status, animal_id, animal_name, spot_id, spot_name, condition, last_seen_at, threshold_days, note, created_at, updated_at, resolved_at` | 通知頁的「動物提醒」（照顧者、建檔者；管理員為全部） |
+| `resolve_animal_alert` | 該動物的照顧者、建檔者、管理員 | `p_alert_id, p_note?, p_mark_missing?` | 無 | 結案；失蹤提醒可順便把動物標記為失蹤 |
+| `admin_run_sentinel` | 管理員 | `p_run?`（`false` 只查狀態） | `{ created, scheduled, last_cron_run_at }` | 後台「哨兵」分頁 |
+
+健康狀況 `condition`：`normal` 正常、`limping` 跛腳、`thin` 消瘦、`injured` 受傷。提醒類型 `type`：`missing` 可能失蹤、`health` 健康。
+
+規則依 M1 決策表 3：門檻 T＝max（3 天，平均出現間隔 × 2）。回報受傷／跛腳／消瘦立即發健康提醒；每天 04:00（pg_cron）檢查，超過 T 沒被看到、期間該點有人餵過、而且這次沒出現還沒提醒過，就發「可能失蹤」提醒。`animals.last_seen_at` 是最後出現時間，訪客也讀得到。
 
 `food_type`：`dry` 乾糧、`wet` 濕食、`mixed` 混合、`other` 其他。
 

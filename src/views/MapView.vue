@@ -6,7 +6,7 @@ import { showToast } from 'vant'
 import { auth, signOut, isAdmin } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
 import { net, flushQueue, onFlushed, refreshQueueCount } from '../lib/offlineQueue'
-import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones, getReportInbox } from '../lib/api'
+import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones, getReportInbox, getAnimalAlerts } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
 import SpotPanel from '../components/SpotPanel.vue'
 
@@ -20,7 +20,7 @@ let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer, zoneBounds, o
 const showingCached = ref(false)
 const showInstall = ref(false)
 const zoneCount = ref(0)
-const openReports = ref(0) // 我照顧的點還沒處理完的居民通報
+const openReports = ref(0) // 我照顧的點還沒處理的居民通報，加上還沒處理的動物提醒
 let spots = []
 
 async function loadSpots() {
@@ -69,7 +69,8 @@ async function loadPending() {
 }
 async function loadInbox() {
   if (!auth.user) { openReports.value = 0; return }
-  openReports.value = (await getReportInbox({ silent: true })).filter((r) => r.status === 'open').length
+  const [reports, alerts] = await Promise.all([getReportInbox({ silent: true }), getAnimalAlerts({ silent: true })])
+  openReports.value = reports.filter((r) => r.status === 'open').length + alerts.filter((a) => a.status === 'open').length
 }
 function onChanged() { loadSpots(); loadPending() }
 /** 點清理提醒：跳到最早一筆未清理的餵食點並開啟面板 */
@@ -155,7 +156,7 @@ watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
       <van-button v-if="isAdmin()" size="small" round plain type="danger" icon="setting-o" @click="router.push({ name: 'admin' })">後台</van-button>
     </div>
     <van-badge v-if="auth.user" :content="openReports || ''" :show-zero="false" class="inbox" :class="{ shifted: pending.length }">
-      <van-button size="small" round plain icon="envelop-o" @click="router.push({ name: 'inbox' })">居民通報</van-button>
+      <van-button size="small" round plain icon="envelop-o" @click="router.push({ name: 'inbox' })">通知</van-button>
     </van-badge>
     <div v-if="!net.online || net.count || showingCached" class="offline" @click="flushNow">
       <van-icon :name="net.online ? 'upgrade' : 'warning-o'" />

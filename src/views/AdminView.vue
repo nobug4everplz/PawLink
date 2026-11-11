@@ -7,7 +7,7 @@ import { showToast, showConfirmDialog } from 'vant'
 import { auth } from '../lib/auth'
 import {
   adminListUsers, setUserRole, adminListSpots, adminSetSpotOwner, setSpotStatus,
-  adminListZones, setZoneStatus, deleteZone, adminListFlags, moderateContent,
+  adminListZones, setZoneStatus, deleteZone, adminListFlags, moderateContent, adminRunSentinel,
 } from '../lib/api'
 
 const route = useRoute(), router = useRouter()
@@ -29,7 +29,18 @@ const loadFlags = () => run(async () => { flags.value = await adminListFlags() }
 async function moderate(f, hide) {
   await run(async () => { await moderateContent(f.target_type, f.target_id, hide); await loadFlags() }, hide ? '已隱藏內容' : '已駁回檢舉，內容恢復顯示')
 }
-onMounted(() => { loadUsers(); loadZones(); loadSpots(); loadFlags() })
+// 哨兵（FR-4.2）：排程狀態與手動執行。資料庫還沒有這個功能時 sentinel 維持 null
+const sentinel = ref(null)
+async function loadSentinel() { try { sentinel.value = await adminRunSentinel(false) } catch { sentinel.value = null } }
+async function runSentinel() {
+  await run(async () => {
+    const r = await adminRunSentinel(true)
+    sentinel.value = r
+    showToast(r.created ? `檢查完成，發出 ${r.created} 則可能失蹤提醒` : '檢查完成，沒有新的提醒')
+  })
+}
+const fmt = (t) => new Date(t).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+onMounted(() => { loadUsers(); loadZones(); loadSpots(); loadFlags(); loadSentinel() })
 
 // ---------- 使用者 ----------
 async function toggleRole(u) {
@@ -160,6 +171,15 @@ const day = (t) => new Date(t).toLocaleDateString('zh-TW')
       </van-cell-group>
       <van-empty v-if="!flags.length && !loading" description="沒有待處理的檢舉" />
       <p class="tip">同一則內容被 3 個人檢舉會先自動隱藏。「隱藏內容」會讓它只剩作者與管理員看得到；「駁回檢舉」會恢復顯示。</p>
+    </van-tab>
+    <van-tab title="哨兵" name="sentinel">
+      <van-cell-group v-if="sentinel" inset style="margin-top:12px">
+        <van-cell title="每日自動檢查" :value="sentinel.scheduled ? '已啟用（每天 04:00）' : '沒有啟用'" />
+        <van-cell title="上次自動檢查" :value="sentinel.last_cron_run_at ? fmt(sentinel.last_cron_run_at) : '還沒有跑過'" />
+      </van-cell-group>
+      <van-empty v-else-if="!loading" description="資料庫還沒有套用哨兵功能" />
+      <div v-if="sentinel" class="bar"><van-button block round type="primary" :loading="loading" @click="runSentinel">立即檢查一次</van-button></div>
+      <p class="tip">哨兵會找出超過 3 天（或平常出現間隔的 2 倍）沒有人回報看到、而且這段期間餵食點有人餵過的動物，提醒該點的照顧者。同一次沒出現只提醒一次。</p>
     </van-tab>
   </van-tabs>
 

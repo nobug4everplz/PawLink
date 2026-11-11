@@ -56,7 +56,7 @@ select test.age_reports(interval '40 minutes');
 select test.ok(public.submit_neighbor_report(test.id('spot2'), 'other', '超過一小時後可以再通報') is not null, '最早的通報超過 1 小時後可以再送');
 
 reset role;
-select test.ok((select count(*) = 5 and count(distinct ip_hash) = 2 and bool_and(ip_hash !~ '203|198' and length(ip_hash) = 64)
+select test.ok((select count(*) = 5 and count(distinct ip_hash) = 2 and bool_and(ip_hash !~ '[.]' and length(ip_hash) = 64)
                 from public.neighbor_reports), '只存加鹽雜湊後的 IP，不存原始 IP');
 select test.ok((select description = '飼料盒沒有收，引來很多蟑螂' from public.neighbor_reports where id = test.id('report')), '說明前後空白會去掉');
 

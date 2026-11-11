@@ -237,3 +237,19 @@ export async function flagContent(target, reason) {
 }
 export const adminListFlags = () => rpc('admin_list_flags')
 export const moderateContent = (type, id, hide) => rpc('moderate_content', { p_target_type: type, p_target_id: id, p_hide: hide })
+
+// ---------- 階段 5 延伸一：失蹤／健康哨兵（FR-4.2） ----------
+export const SIGHTING_CONDITION = { normal: '看起來正常', limping: '跛腳', thin: '消瘦', injured: '受傷' }
+export const reportSighting = (animalId, condition, note, spotId) =>
+  rpc('report_sighting', { p_animal_id: animalId, p_condition: condition, p_spot_id: spotId || null, p_note: note || null })
+/** 還沒套用哨兵的資料庫時回傳 null，畫面就不顯示這一區 */
+export async function getAnimalSightings(animalId) {
+  try { return await rpc('get_animal_sightings', { p_animal_id: animalId, p_limit: 10 }) } catch { return null }
+}
+export async function getAnimalAlerts({ silent = false } = {}) {
+  if (!supabase) return []
+  try { return await rpc('get_my_animal_alerts') } catch (e) { if (!silent) throw e; return [] }
+}
+export const resolveAnimalAlert = (id, note, markMissing = false) =>
+  rpc('resolve_animal_alert', { p_alert_id: id, p_note: note || null, p_mark_missing: markMissing })
+export const adminRunSentinel = (run = true) => rpc('admin_run_sentinel', { p_run: run })

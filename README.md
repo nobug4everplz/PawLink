@@ -17,6 +17,7 @@ npm run dev
 - 階段 2：`/admin` 管理後台（角色、保育熱區繪製、餵食點管理）、`/conservation` 保育宣導頁；宣導文案與連結在 `src/lib/conservationContent.js`
 - 階段 3：`/spots/:id/report` 匿名通報、`/spots/:id/progress` 公開進度、`/reports` 照顧者收件匣、`/community` 交流空間；Turnstile 設定見 `docs/turnstile-setup.md`
 - 階段 4：PWA（`vite.config.js` 的 `VitePWA`、圖示在 `public/`）、`/install` 加入主畫面教學、離線打卡佇列 `src/lib/offlineQueue.js`
+- 階段 5 延伸一：失蹤／健康哨兵。身分檔的「回報目擊」、`/reports` 通知頁的「動物提醒」、後台「哨兵」分頁；規則在 `supabase/migrations/20261111000900_sentinel.sql`，每日排程用 pg_cron
 - `scripts/acceptance.mjs` 對真實 Supabase 的四角色權限驗收（`npm run test:acceptance`）
 - `.github/workflows/keepalive.yml` 每天喚醒 Supabase，避免免費專案 7 天沒活動被暫停
 

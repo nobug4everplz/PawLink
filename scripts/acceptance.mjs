@@ -344,6 +344,41 @@ if (admin) {
   }
 }
 
+// ---------- 階段 5 延伸一：失蹤／健康哨兵 ----------
+{
+  const probe = await user.c.rpc('get_animal_sightings', { p_animal_id: animalId })
+  if (probe.error) console.log('⚠️  資料庫還沒套用哨兵的 migration（20261111000900），略過哨兵測試：' + probe.error.message)
+  else {
+    ok('訪客不能回報目擊', !!(await guest.rpc('report_sighting', { p_animal_id: animalId })).error)
+    ok('訪客讀不到目擊紀錄與提醒', denied(await guest.from('sightings').select('id')) && denied(await guest.from('animal_alerts').select('id')))
+    ok('不能繞過 RPC 直接寫目擊紀錄', !!(await user.c.from('sightings').insert({ animal_id: animalId })).error)
+    ok('不認得的健康狀況被擋下', !!(await user.c.rpc('report_sighting', { p_animal_id: animalId, p_condition: 'sick' })).error)
+    const s1 = await user.c.rpc('report_sighting', { p_animal_id: animalId, p_condition: 'normal', p_note: 'QA 目擊' })
+    ok('登入者可回報目擊；狀況正常不發提醒', !s1.error && !!s1.data?.sighting_id && !s1.data?.alert_id, msg(s1))
+    const seen = await guest.from('animals').select('last_seen_at').eq('id', animalId).single()
+    ok('回報後更新最後出現時間', !!seen.data?.last_seen_at && Date.now() - new Date(seen.data.last_seen_at).getTime() < 120000, msg(seen))
+    ok('同一人 10 分鐘內重複回報被擋下', !!(await user.c.rpc('report_sighting', { p_animal_id: animalId })).error)
+    const s2 = await care.c.rpc('report_sighting', { p_animal_id: animalId, p_condition: 'injured', p_note: 'QA 受傷回報' })
+    ok('回報受傷立即發健康提醒（決策表 3 規則 1）', !s2.error && !!s2.data?.alert_id, msg(s2))
+    const list = await user.c.rpc('get_animal_sightings', { p_animal_id: animalId })
+    ok('登入者可查目擊紀錄（含回報者暱稱）', !list.error && list.data.length === 2 && list.data.every((x) => !!x.reporter_name), msg(list))
+    const al = await owner.c.rpc('get_my_animal_alerts')
+    const mine = al.data?.find((x) => x.id === s2.data?.alert_id)
+    ok('該點照顧者收到健康提醒', mine?.type === 'health' && mine?.condition === 'injured' && mine?.status === 'open', msg(al))
+    ok('健康提醒不能標記為失蹤', !!(await owner.c.rpc('resolve_animal_alert', { p_alert_id: s2.data?.alert_id, p_mark_missing: true })).error)
+    ok('照顧者可把提醒標記為已處理', !(await owner.c.rpc('resolve_animal_alert', { p_alert_id: s2.data?.alert_id, p_note: 'QA 已處理' })).error)
+    const al2 = await owner.c.rpc('get_my_animal_alerts')
+    ok('處理後狀態為已處理並留有備註', al2.data?.find((x) => x.id === s2.data?.alert_id)?.status === 'resolved' && al2.data?.find((x) => x.id === s2.data?.alert_id)?.note === 'QA 已處理', msg(al2))
+    ok('一般使用者不能手動執行哨兵檢查', !!(await user.c.rpc('admin_run_sentinel')).error)
+    const isAdm = admin && (await admin.c.from('profiles').select('role').eq('id', admin.id).single()).data?.role === 'admin'
+    if (isAdm) {
+      const run = await admin.c.rpc('admin_run_sentinel', { p_run: true })
+      ok('管理員可手動執行哨兵檢查', !run.error && typeof run.data?.created === 'number', msg(run))
+      ok('每日排程（pg_cron）已啟用', run.data?.scheduled === true, JSON.stringify(run.data))
+    }
+  }
+}
+
 // ---------- 收尾 ----------
 {
   ok('建檔者可刪自己的動物', allowed(await user.c.from('animals').delete().eq('id', animalId).select('id')))

@@ -1,17 +1,20 @@
 <script setup>
-// 照顧者的通報收件匣（FR-2.2 站內通知）：只列出自己照顧的餵食點收到的通報
+// 照顧者的通知（站內通知）：居民通報（FR-2.2）與哨兵的動物提醒（FR-4.2），只列出自己照顧的餵食點
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { showToast } from 'vant'
-import { getReportInbox, handleReport, REPORT_CATEGORY, REPORT_STATUS } from '../lib/api'
+import { getReportInbox, handleReport, REPORT_CATEGORY, REPORT_STATUS, getAnimalAlerts, resolveAnimalAlert, SIGHTING_CONDITION } from '../lib/api'
 
-const router = useRouter()
+const route = useRoute(), router = useRouter()
+const tab = ref(route.query.tab === 'alerts' ? 'alerts' : 'reports')
 const list = ref([]), loading = ref(true), busy = ref(false)
 const cur = ref(null), show = ref(false), response = ref('')
+const alerts = ref([]), curAlert = ref(null), showAlert = ref(false), alertNote = ref('')
 
 async function load() {
   loading.value = true
   try { list.value = await getReportInbox() } catch (e) { showToast(e.message) } finally { loading.value = false }
+  alerts.value = await getAnimalAlerts({ silent: true })
 }
 onMounted(load)
 const pending = computed(() => list.value.filter((r) => r.status !== 'resolved'))
@@ -26,12 +29,34 @@ async function save(status) {
     await load()
   } catch (e) { showToast(e.message) } finally { busy.value = false }
 }
+const openAlerts = computed(() => alerts.value.filter((a) => a.status === 'open'))
+const doneAlerts = computed(() => alerts.value.filter((a) => a.status !== 'open'))
+const days = (t) => Math.max(0, Math.floor((Date.now() - new Date(t).getTime()) / 86400000))
+function alertTitle(a) {
+  return a.type === 'missing' ? `${a.animal_name} 可能失蹤` : `${a.animal_name} ${SIGHTING_CONDITION[a.condition] || '健康狀況異常'}`
+}
+function alertDesc(a) {
+  if (a.type === 'missing') return `已經 ${days(a.last_seen_at)} 天沒有人回報看到牠（門檻 ${Number(a.threshold_days)} 天），這段期間餵食點有人餵過。`
+  return `有人回報看到牠${SIGHTING_CONDITION[a.condition] || '狀況異常'}，請找時間確認。`
+}
+function openAlert(a) { curAlert.value = a; alertNote.value = a.note || ''; showAlert.value = true }
+async function resolveAlert(markMissing) {
+  busy.value = true
+  try {
+    await resolveAnimalAlert(curAlert.value.id, alertNote.value.trim(), markMissing)
+    showAlert.value = false
+    showToast(markMissing ? '已結案，並把牠標記為失蹤' : '已標記為已處理')
+    await load()
+  } catch (e) { showToast(e.message) } finally { busy.value = false }
+}
 const when = (t) => new Date(t).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 </script>
 
 <template>
-  <van-nav-bar title="居民通報" left-arrow @click-left="router.push('/')" />
-  <van-empty v-if="!loading && !list.length" description="你照顧的餵食點目前沒有收到通報" />
+  <van-nav-bar title="通知" left-arrow @click-left="router.push('/')" />
+  <van-tabs v-model:active="tab" sticky>
+    <van-tab title="居民通報" name="reports" :badge="pending.filter((r) => r.status === 'open').length || ''">
+    <van-empty v-if="!loading && !list.length" description="你照顧的餵食點目前沒有收到通報" />
   <template v-for="group in [{ title: '待處理', items: pending }, { title: '已處理', items: resolved }]" :key="group.title">
     <template v-if="group.items.length">
       <h4 class="sec">{{ group.title }}（{{ group.items.length }}）</h4>
@@ -47,6 +72,26 @@ const when = (t) => new Date(t).toLocaleString('zh-TW', { month: 'numeric', day:
     </template>
   </template>
   <p v-if="list.length" class="tip">通報是匿名的，內容只有該餵食點的照顧者與管理員看得到。你的回覆會公開顯示在餵食點的進度頁。</p>
+    </van-tab>
+    <van-tab title="動物提醒" name="alerts" :badge="openAlerts.length || ''">
+      <van-empty v-if="!loading && !alerts.length" description="你照顧的動物目前沒有提醒" />
+      <template v-for="group in [{ title: '待處理', items: openAlerts }, { title: '已處理', items: doneAlerts }]" :key="group.title">
+        <template v-if="group.items.length">
+          <h4 class="sec">{{ group.title }}（{{ group.items.length }}）</h4>
+          <van-cell-group inset>
+            <van-cell v-for="a in group.items" :key="a.id" is-link @click="openAlert(a)">
+              <template #title>
+                <van-tag :type="a.status !== 'open' ? 'success' : a.type === 'missing' ? 'warning' : 'danger'">{{ a.type === 'missing' ? '可能失蹤' : '健康' }}</van-tag>
+                <b class="cat">{{ alertTitle(a) }}</b>
+              </template>
+              <template #label><div class="desc">{{ alertDesc(a) }}</div><div>{{ a.spot_name || '未指定餵食點' }}・{{ when(a.updated_at) }}</div></template>
+            </van-cell>
+          </van-cell-group>
+        </template>
+      </template>
+      <p class="tip">系統每天檢查一次：動物超過 3 天（或牠平常出現間隔的 2 倍）沒有人回報看到，而且這段期間餵食點有人餵過，就會提醒照顧者。有人回報受傷、跛腳或消瘦時會立刻提醒。在動物身分檔按「回報目擊」就能更新。</p>
+    </van-tab>
+  </van-tabs>
 
   <van-popup v-model:show="show" position="bottom" round closeable>
     <div v-if="cur" class="sheet">
@@ -59,6 +104,23 @@ const when = (t) => new Date(t).toLocaleString('zh-TW', { month: 'numeric', day:
         <van-button round type="success" :loading="busy" @click="save('resolved')">已處理</van-button>
       </div>
       <van-button v-if="cur.status !== 'open'" size="small" plain block style="margin-top:10px" :disabled="busy" @click="save('open')">改回待處理</van-button>
+    </div>
+  </van-popup>
+
+  <van-popup v-model:show="showAlert" position="bottom" round closeable>
+    <div v-if="curAlert" class="sheet">
+      <h4>{{ alertTitle(curAlert) }}</h4>
+      <p class="full">{{ alertDesc(curAlert) }}</p>
+      <van-button size="small" plain type="primary" icon="photo-o" @click="router.push({ name: 'animal', params: { id: curAlert.animal_id } })">看身分檔、回報目擊</van-button>
+      <template v-if="curAlert.status === 'open'">
+        <van-field v-model="alertNote" type="textarea" rows="2" maxlength="200" show-word-limit class="resp" style="margin-top:12px"
+          placeholder="處理備註（選填），例：已帶去看醫生、問過鄰居說搬家帶走了" />
+        <div class="btns" :style="curAlert.type === 'missing' ? '' : 'grid-template-columns:1fr'">
+          <van-button v-if="curAlert.type === 'missing'" round plain type="warning" :loading="busy" @click="resolveAlert(true)">標記為失蹤</van-button>
+          <van-button round type="success" :loading="busy" @click="resolveAlert(false)">已處理</van-button>
+        </div>
+      </template>
+      <p v-else-if="curAlert.note" class="full" style="margin-top:12px;color:#666">處理備註：{{ curAlert.note }}</p>
     </div>
   </van-popup>
 </template>
