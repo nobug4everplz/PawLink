@@ -3,7 +3,8 @@ import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { auth, isAdmin } from '../lib/auth'
-import { getAnimal, updateTnrStage, canEditAnimal, uploadAnimalPhoto, photoUrl, reportSighting, getAnimalSightings, SIGHTING_CONDITION } from '../lib/api'
+import { getAnimal, updateTnrStage, canEditAnimal, uploadAnimalPhoto, photoUrl, reportSighting, getAnimalSightings, SIGHTING_CONDITION, getTnrTasks, openTnrCase } from '../lib/api'
+import TnrSteps from '../components/TnrSteps.vue'
 import { compressImage } from '../lib/image'
 
 const route = useRoute(), router = useRouter()
@@ -12,6 +13,12 @@ const STAGES = ['未結紮', '誘捕中', '已手術', '術後照護', '已原�
 const SEX = { male: '公', female: '母', unknown: '未知' }
 const SPECIES = { cat: '貓', dog: '狗', other: '其他' }
 const STATUS = { missing: ['失蹤中', 'warning'], deceased: ['已過世', 'default'], adopted: ['已送養', 'primary'] }
+// TNR 接力（FR-5.2）。tnr 是 null 表示資料庫還沒有這個功能
+const tnr = ref(null)
+async function startRelay() {
+  try { await showConfirmDialog({ title: '發起 TNR 接力', message: `把「${a.value.name}」的誘捕、送醫、術後照顧、放回分成四個任務，讓大家分別認領。` }) } catch { return }
+  try { await openTnrCase(a.value.id); showToast('已發起，等大家認領'); await load() } catch (e) { showToast(e.message) }
+}
 // 哨兵（FR-4.2）：回報目擊。sightings 是 null 表示資料庫還沒有這個功能，整區不顯示
 const sightings = ref(null), showSight = ref(false), cond = ref('normal'), note = ref(''), sending = ref(false)
 const ago = (t) => {
@@ -34,6 +41,7 @@ async function load() {
     a.value = await getAnimal(route.params.id)
     canEdit.value = await canEditAnimal(a.value, auth.user, isAdmin())
     sightings.value = auth.user ? await getAnimalSightings(a.value.id) : null
+    tnr.value = auth.user ? await getTnrTasks(a.value.id) : null
   } catch (e) { showToast(e.message) }
 }
 onMounted(load)
@@ -95,6 +103,14 @@ async function addPhoto(it) {
     <p v-if="canEdit" class="tip">點任一階段即可更新；「已手術」起會自動標記已結紮。</p>
     <p v-else-if="auth.user" class="tip">只有建立者或該餵食點的照顧者可以更新進度。到餵食點面板按「成為照顧者」即可。</p>
     <p v-else class="tip">登入後，建立者或照顧者可以更新進度。</p>
+    <template v-if="tnr">
+      <div class="sight-head">
+        <h4>TNR 接力</h4>
+        <van-button v-if="canEdit && a.tnr_stage < 5 && !(tnr.length && tnr[0].case_status === 'open')" round size="small" type="primary" icon="exchange" @click="startRelay">發起接力</van-button>
+      </div>
+      <TnrSteps v-if="tnr.length" :tasks="tnr" @changed="load" />
+      <p v-else class="tip">還沒有人發起。發起後，誘捕、送醫、術後照顧、放回可以由不同的人認領，每完成一步，上面的結紮進度會自動更新。</p>
+    </template>
     <van-uploader v-if="canEdit" :after-read="addPhoto" style="margin:12px 16px">
       <van-button size="small" icon="photograph">新增照片</van-button>
     </van-uploader>
