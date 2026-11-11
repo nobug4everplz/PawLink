@@ -3,7 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showConfirmDialog } from 'vant'
 import { auth, isAdmin } from '../lib/auth'
-import { getAnimal, updateTnrStage, canEditAnimal, uploadAnimalPhoto, photoUrl, reportSighting, getAnimalSightings, SIGHTING_CONDITION, getTnrTasks, openTnrCase } from '../lib/api'
+import { getAnimal, updateTnrStage, canEditAnimal, uploadAnimalPhoto, photoUrl, reportSighting, getAnimalSightings, SIGHTING_CONDITION, getTnrTasks, openTnrCase, getAdoptions, registerAdoption, ADOPTION_STATUS } from '../lib/api'
 import TnrSteps from '../components/TnrSteps.vue'
 import { compressImage } from '../lib/image'
 
@@ -18,6 +18,19 @@ const tnr = ref(null)
 async function startRelay() {
   try { await showConfirmDialog({ title: '發起 TNR 接力', message: `把「${a.value.name}」的誘捕、送醫、術後照顧、放回分成四個任務，讓大家分別認領。` }) } catch { return }
   try { await openTnrCase(a.value.id); showToast('已發起，等大家認領'); await load() } catch (e) { showToast(e.message) }
+}
+// 領養陪伴（FR-5.4）。adoption 是 undefined 表示資料庫還沒有這個功能，null 表示還沒有人登記
+const adoption = ref(undefined), showAdopt = ref(false), adoptedOn = ref(''), adoptNote = ref(''), adopting = ref(false)
+const todayTw = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date())
+function openAdopt() { adoptedOn.value = todayTw(); adoptNote.value = ''; showAdopt.value = true }
+async function sendAdopt() {
+  adopting.value = true
+  try {
+    await registerAdoption(a.value.id, adoptedOn.value, adoptNote.value.trim())
+    showAdopt.value = false
+    await load()
+    showToast(adoption.value?.status === 'active' ? '已登記，第 7、30、90 天會請你回報近況' : '已登記，等照顧者確認')
+  } catch (e) { showToast(e.message) } finally { adopting.value = false }
 }
 // 哨兵（FR-4.2）：回報目擊。sightings 是 null 表示資料庫還沒有這個功能，整區不顯示
 const sightings = ref(null), showSight = ref(false), cond = ref('normal'), note = ref(''), sending = ref(false)
@@ -42,6 +55,8 @@ async function load() {
     canEdit.value = await canEditAnimal(a.value, auth.user, isAdmin())
     sightings.value = auth.user ? await getAnimalSightings(a.value.id) : null
     tnr.value = auth.user ? await getTnrTasks(a.value.id) : null
+    const ad = auth.user ? await getAdoptions(a.value.id) : null
+    adoption.value = ad === null ? undefined : ad[0] || null
   } catch (e) { showToast(e.message) }
 }
 onMounted(load)
@@ -111,10 +126,33 @@ async function addPhoto(it) {
       <TnrSteps v-if="tnr.length" :tasks="tnr" @changed="load" />
       <p v-else class="tip">還沒有人發起。發起後，誘捕、送醫、術後照顧、放回可以由不同的人認領，每完成一步，上面的結紮進度會自動更新。</p>
     </template>
+    <template v-if="adoption !== undefined && (adoption || a.status !== 'deceased')">
+      <div class="sight-head">
+        <h4>領養陪伴</h4>
+        <van-button v-if="!adoption" round size="small" type="primary" icon="like-o" @click="openAdopt">我領養了牠</van-button>
+      </div>
+      <van-cell-group v-if="adoption" inset>
+        <van-cell :title="`${adoption.adopter_name || '會員'} 領養`" :label="`${adoption.adopted_on} 起${adoption.buddy_name ? '・陪伴者 ' + adoption.buddy_name : ''}`"
+                  :is-link="adoption.my_role !== 'viewer'" @click="adoption.my_role !== 'viewer' && router.push({ name: 'adoptions' })">
+          <template #value><van-tag :type="ADOPTION_STATUS[adoption.status][1]">{{ ADOPTION_STATUS[adoption.status][0] }}</van-tag></template>
+        </van-cell>
+      </van-cell-group>
+      <p v-if="!adoption" class="tip">把牠帶回家了嗎？登記後由照顧者確認，之後第 7、30、90 天會請你回報牠的近況。</p>
+      <p v-else-if="adoption.my_role === 'caretaker' && adoption.status === 'pending'" class="tip">這筆登記在等你確認，點上面那一列處理。</p>
+    </template>
     <van-uploader v-if="canEdit" :after-read="addPhoto" style="margin:12px 16px">
       <van-button size="small" icon="photograph">新增照片</van-button>
     </van-uploader>
   </div>
+  <van-popup v-model:show="showAdopt" position="bottom" round closeable>
+    <div v-if="a" class="sheet">
+      <h4>我領養了「{{ a.name }}」</h4>
+      <van-field v-model="adoptedOn" type="date" label="領養日期" :max="todayTw()" class="note" />
+      <van-field v-model="adoptNote" type="textarea" rows="2" maxlength="200" show-word-limit class="note" style="margin-top:10px" placeholder="備註（選填），例：已帶去醫院做過健檢" />
+      <van-button block round type="primary" :loading="adopting" style="margin-top:14px" @click="sendAdopt">登記領養</van-button>
+      <p class="tip" style="margin:10px 0 0">登記後這隻動物會標成「已送養」，不再出現在失蹤提醒裡。</p>
+    </div>
+  </van-popup>
   <van-popup v-model:show="showSight" position="bottom" round closeable>
     <div v-if="a" class="sheet">
       <h4>我看到「{{ a.name }}」了</h4>

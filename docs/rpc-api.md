@@ -1,4 +1,4 @@
-# 前端資料介面（第一～三階段、哨兵、輪值、TNR 接力）
+# 前端資料介面（第一～三階段、哨兵、輪值、TNR 接力、領養陪伴）
 
 前端用 `supabase-js`。地圖與統計一律走 RPC；其他 CRUD 直接用 `supabase.from('表')`，權限由 RLS 把關。
 
@@ -104,6 +104,18 @@ Turnstile 的設定步驟見 `docs/turnstile-setup.md`。
 | `get_tnr_tasks` | 登入者 | `p_animal_id?` | `task_id, case_id, case_status, case_note, opener_name, animal_id, animal_name, spot_name, step_no, step, status, claimed_by, claimer_name, note, done_at, is_mine, is_ready, can_manage` | 帶動物：最近一個案件的四個任務；不帶：所有進行中案件（看板） |
 
 步驟 `step`：`trap` 誘捕、`vet` 送醫、`recovery` 術後照顧、`release` 放回，完成後 `animals.tnr_stage` 依序變成 2、3、4、5（只往前）。任務狀態：`open` 待認領、`claimed` 已認領、`done` 已完成。案件狀態：`open`、`done`、`cancelled`。
+
+### 階段 5 延伸四：領養陪伴
+
+| 函式 | 誰可呼叫 | 參數 | 回傳 | 用在哪 |
+| --- | --- | --- | --- | --- |
+| `register_adoption` | 登入者 | `p_animal_id, p_adopted_on?, p_note?` | 領養 `uuid` | 身分檔「我領養了牠」。一般會員是待確認；能編輯這隻動物的人直接生效 |
+| `confirm_adoption` | 建檔者、該動物出沒點的照顧者、管理員（不能是領養人本人） | `p_adoption_id` | 無 | 確認登記。確認的人成為陪伴者，建立三份問卷，動物狀態改成 `adopted` |
+| `cancel_adoption` | 領養人、陪伴者、可編輯這隻動物的人 | `p_adoption_id` | 無 | 撤回、退回或退養。已生效的話動物狀態改回 `active` |
+| `submit_adoption_followup` | 領養人 | `p_followup_id, p_eating_ok, p_health_ok, p_settled_ok, p_note?` | `boolean`（是否有狀況） | 填關懷問卷。到期才能填；三份都填完，紀錄改成 `completed` |
+| `get_adoptions` | 登入者 | `p_animal_id?` | `adoption_id, animal_id, animal_name, status, adopted_on, note, adopter_name, buddy_name, my_role, due_count, issue_count, followups` | 帶動物：這隻動物目前的領養紀錄；不帶：跟我有關的（我領養的、我陪伴的、等我確認的） |
+
+領養狀態 `status`：`pending` 待確認、`active` 陪伴中、`completed` 三份問卷都填完、`cancelled` 已取消。`my_role`：`adopter` 領養人、`buddy` 陪伴者、`caretaker` 可以確認或取消的人、`viewer` 其他人（`note`、`followups`、`issue_count` 不提供）。`followups` 是陣列，每筆有 `id, day_offset`（7、30、90）`, due_on, is_due, answered_at, eating_ok, health_ok, settled_ok, has_issue, note`。這個 migration 也修正了 `cancel_tnr_case` 在發起人帳號被刪除後權限檢查失效的問題。
 
 `food_type`：`dry` 乾糧、`wet` 濕食、`mixed` 混合、`other` 其他。
 
