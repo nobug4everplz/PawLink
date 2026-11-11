@@ -1,16 +1,82 @@
 // 保育宣導頁內容（FR-3.3）。文字與連結集中在這裡，組員可以直接改，不用動頁面程式。
-// 連結上線前請逐一點開確認仍有效；捐款一律連到對方官方網站，本平台不經手金流。
+// 連結 2026-11-11 已逐一確認可開啟；之後新增請先點開確認。捐款一律連到對方官方網站，本平台不經手金流。
 export const SPECIES = [
   {
     key: 'leopard-cat',
     emoji: '🐆',
     name: '石虎',
     sci: 'Prionailurus bengalensis',
-    status: '瀕臨絕種保育類野生動物',
+    status: '第 I 級 瀕臨絕種',
+    url: 'https://www.forest.gov.tw/0008043',
     facts: [
       '臺灣現存唯一的原生野生貓科動物，體型和家貓差不多，額頭有兩條白色縱紋，耳後有白斑。',
-      '主要生活在苗栗、臺中、南投的淺山地區，也就是離農田和聚落很近的低海拔山區，族群估計只剩數百隻。',
-      '主要威脅是棲地開發、路殺、誤中獸鋏或毒餌，以及流浪犬貓帶來的追咬、搶食與疾病傳染。',
+      '現存主要族群在苗栗、臺中、南投的淺山，也就是離農田和聚落很近的低海拔山區。',
+      '林業及自然保育署指出遊蕩犬是主要威脅之一，近年都有石虎被犬隻咬死的案例；另外還有路殺、獸鋏與毒餌。',
+    ],
+  },
+  {
+    key: 'pangolin',
+    emoji: '🦔',
+    name: '臺灣穿山甲',
+    sci: 'Manis pentadactyla pentadactyla',
+    status: '第 II 級 珍貴稀有',
+    url: 'https://www.forest.gov.tw/0008047',
+    facts: [
+      '全身覆蓋鱗片，受到驚嚇會捲成球，夜間活動，以螞蟻和白蟻為食。',
+      '分布在全島海拔 1,000 公尺以下的淺山、丘陵與臺地，臺北市區旁的富陽公園、福州山也找得到。',
+      '近十年救傷的穿山甲，最主要的外傷來源就是自由活動的犬隻攻擊。捲成球擋不住狗的啃咬。',
+    ],
+  },
+  {
+    key: 'otter',
+    emoji: '🦦',
+    name: '歐亞水獺',
+    sci: 'Lutra lutra',
+    status: '第 I 級 瀕臨絕種',
+    url: 'https://www.forest.gov.tw/0008044',
+    facts: [
+      '臺灣本島已多年沒有紀錄，大金門是目前唯一穩定的族群，烈嶼偶爾出現。',
+      '住在金門的湖庫、池塘與溪溝，以魚、蝦、蟹和蛙類為食。',
+      '放養與遊蕩的犬貓會跟水獺爭奪領域和食物，也可能傳染疾病；金門西半部的威脅最嚴重。',
+    ],
+  },
+  {
+    key: 'crab-eating-mongoose',
+    emoji: '🦡',
+    name: '食蟹獴（棕簑貓）',
+    sci: 'Herpestes urva',
+    status: '第 III 級 其他應予保育',
+    url: 'https://www.forest.gov.tw/0008324',
+    facts: [
+      '體型像大型鼬鼠，頸部兩側各有一條白色條紋，白天也會活動。',
+      '住在低中海拔的溪流與森林，以螃蟹、蛙類、魚類為食。',
+      '常沿溪谷與山路活動，容易遇上放養或遊蕩的犬隻。',
+    ],
+  },
+  {
+    key: 'small-civet',
+    emoji: '🐈',
+    name: '麝香貓',
+    sci: 'Viverricula indica',
+    status: '第 II 級 珍貴稀有',
+    url: 'https://www.forest.gov.tw/0008324',
+    facts: [
+      '身上有縱列的黑色斑點，尾巴有黑白相間的環紋，夜間在地面活動。',
+      '偏好低海拔淺山的草生地、農地與次生林，和人類活動範圍高度重疊。',
+      '在地面覓食，容易被犬隻追咬，也會被戶外飼料吸引而靠近犬貓聚集處。',
+    ],
+  },
+  {
+    key: 'pheasant',
+    emoji: '🐦',
+    name: '環頸雉',
+    sci: 'Phasianus colchicus formosanus',
+    status: '第 II 級 珍貴稀有',
+    url: 'https://www.forest.gov.tw/0008324',
+    facts: [
+      '臺灣特有亞種，公鳥脖子有一圈白環，母鳥全身褐色。',
+      '住在西部與東部平原的草生地、農地與河床，在地面築巢。',
+      '在地面築巢，蛋和幼鳥很容易被遊蕩犬貓捕食。',
     ],
   },
   {
@@ -18,7 +84,7 @@ export const SPECIES = [
     emoji: '🦝',
     name: '白鼻心',
     sci: 'Paguma larvata',
-    status: '一般類野生動物（2019 年起由保育類調整），仍受野生動物保育法規範',
+    status: '一般類（已不在保育類名錄），仍受野生動物保育法規範',
     facts: [
       '又叫果子貍，從額頭到鼻尖有一條明顯的白色縱帶，夜間活動，擅長爬樹，以果實為主食。',
       '常出現在淺山果園與住宅區周邊，會被放在戶外的飼料和廚餘吸引，容易與流浪犬貓發生衝突。',
@@ -41,8 +107,10 @@ export const DOS = [
 ]
 
 export const LINKS = [
-  { title: '台灣石虎保育協會', desc: '石虎保育行動與捐款支持', url: 'https://www.lcactw.org/', donate: true },
-  { title: '農業部林業及自然保育署', desc: '保育類野生動物名錄與保育政策', url: 'https://www.forest.gov.tw/' },
-  { title: '自然保育網', desc: '林業及自然保育署的保育資訊網站', url: 'https://conservation.forest.gov.tw/' },
-  { title: '路殺社（臺灣動物路死觀察網）', desc: '回報路殺紀錄，協助找出動物路死熱點', url: 'https://roadkill.tw/' },
+  { title: '農業部林業及自然保育署', desc: '保育類野生動物名錄、保育政策與各物種介紹', url: 'https://www.forest.gov.tw/' },
+  { title: '陸域保育類野生動物名錄', desc: '各物種的保育等級（最新修正 2025 年 2 月）', url: 'https://www.forest.gov.tw/0008324' },
+  { title: '瀕危物種總覽（林業及自然保育署）', desc: '石虎、穿山甲、歐亞水獺等瀕危物種的分布與威脅', url: 'https://www.forest.gov.tw/0004751' },
+  { title: '農業部生物多樣性研究所', desc: '原特有生物研究保育中心，負責野生動物救傷與研究', url: 'https://www.tbri.gov.tw/' },
+  { title: '野生動物急救站', desc: '生物多樣性研究所的救傷單位，看到受傷野生動物可聯絡', url: 'https://www.tbri.gov.tw/redirect_link.php?theme=web_structure&id=85' },
+  { title: '臺灣動物路死觀察網（路殺社）', desc: '回報路殺紀錄，協助找出動物路死熱點', url: 'https://roadkill.tw/' },
 ]

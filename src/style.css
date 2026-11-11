@@ -2,3 +2,4 @@ html, body, #app { height: 100%; margin: 0; }
 body { font-family: -apple-system, "Noto Sans TC", sans-serif; }
 .zone-label { background: rgba(255,255,255,.85); border: 1px solid #e03e3e; color: #b42318; font-size: 12px; padding: 1px 6px; box-shadow: none; }
 .zone-label::before { display: none; }
+.hide-zone-labels .zone-label { display: none; }
