@@ -1,4 +1,4 @@
-# 前端資料介面（第一、二階段）
+# 前端資料介面（第一～三階段）
 
 前端用 `supabase-js`。地圖與統計一律走 RPC；其他 CRUD 直接用 `supabase.from('表')`，權限由 RLS 把關。
 
@@ -43,6 +43,26 @@
 | `admin_set_spot_owner` | 管理員 | `p_spot_id, p_user_id` | 無 | 補上沒有 owner 的餵食點 |
 
 熱區的停用、啟用與刪除直接寫 `conservation_zones`（`status` 欄位、`delete`），由 RLS 限制只有管理員可以。
+
+### 階段 3：社區溝通
+
+| 函式 | 誰可呼叫 | 參數 | 回傳 | 用在哪 |
+| --- | --- | --- | --- | --- |
+| `submit_neighbor_report` | 所有人（免登入） | `p_spot_id, p_category, p_description, p_turnstile_token?` | 通報 `uuid` | 匿名通報表單。頻率限制與 Turnstile 見下方 |
+| `report_captcha_required` | 所有人 | 無 | `boolean` | 表單要不要顯示 Turnstile |
+| `get_spot_public_reports` | 所有人 | `p_spot_id` | `id, category, status, response, created_at, handled_at`（近 180 天、最多 30 則，不含通報內容） | 公開進度頁 |
+| `get_my_report_inbox` | 登入者 | 無 | `id, spot_id, spot_name, category, description, status, response, created_at, handled_at` | 照顧者收件匣（只有自己照顧的點；管理員為全部） |
+| `handle_neighbor_report` | 該點照顧者、管理員 | `p_report_id, p_status ('open'/'acknowledged'/'resolved'), p_response?` | 無 | 處理通報；回覆會公開 |
+| `admin_list_flags` | 管理員 | 無 | `target_type, target_id, post_id, title, excerpt, author_name, content_status, flag_count, reasons, last_flagged` | 後台檢舉清單 |
+| `moderate_content` | 管理員 | `p_target_type ('post'/'comment'), p_target_id, p_hide` | 無 | 隱藏內容或駁回檢舉 |
+
+通報類別 `category`：`mess` 環境髒亂、`noise` 噪音、`gathering` 動物聚集、`timing` 餵食時間不當、`other` 其他。
+
+通報頻率限制（以來源 IP 的加鹽雜湊計算，不存原始 IP）：60 秒內 1 則、同一餵食點 10 分鐘內 1 則、1 小時內 3 則；另外每個餵食點 1 小時最多 10 則。
+
+貼文、留言、檢舉直接讀寫 `posts`、`comments`、`content_flags`，由 RLS 把關：每人 1 小時最多 5 篇貼文、30 則留言；同一則內容被 3 個人檢舉會自動隱藏。
+
+Turnstile 的設定步驟見 `docs/turnstile-setup.md`。
 
 `food_type`：`dry` 乾糧、`wet` 濕食、`mixed` 混合、`other` 其他。
 

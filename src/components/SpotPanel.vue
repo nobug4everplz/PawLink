@@ -85,6 +85,11 @@ const cover = (a) => {
       <van-button v-if="auth.user" round size="small" plain icon="plus" @click="router.push({ name: 'animal-new', params: { id: spotId } })">新增動物</van-button>
     </div>
 
+    <div class="public">
+      <a @click="router.push({ name: 'spot-progress', params: { id: spotId } })">公開進度</a>
+      <a class="warn" @click="router.push({ name: 'spot-report', params: { id: spotId } })">這裡有問題？匿名通報</a>
+    </div>
+
     <div v-if="animals.length" class="animals">
       <div v-for="a in animals" :key="a.id" class="animal" @click="router.push({ name: 'animal', params: { id: a.id } })">
         <van-image round width="52" height="52" fit="cover" :src="cover(a)">
@@ -116,6 +121,9 @@ const cover = (a) => {
 .hint { color: #999; font-size: 12px; }
 .info p.cz { color: #b42318; font-size: 13px; }
 .btns { display: flex; gap: 8px; margin: 12px 0; flex-wrap: wrap; }
+.public { display: flex; gap: 18px; font-size: 13px; margin: 0 0 12px; }
+.public a { color: #1989fa; }
+.public a.warn { color: #b42318; }
 .animals { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 4px; }
 .animal { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 64px; }
 .an { font-size: 13px; }
