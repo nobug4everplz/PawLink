@@ -13,7 +13,9 @@ npm run dev
 ## 目錄
 - `src/views` 頁面、`src/components` 元件、`src/lib` Supabase 與資料存取
 - `supabase/migrations` 資料庫變更（唯一來源）、`supabase/tests` RLS 測試
-- `docs/` 權限矩陣與 RPC 介面（前端以此為準）
+- `docs/` 權限矩陣與 RPC 介面（前端以此為準）、`docs/acceptance.md` 驗收紀錄
+- `scripts/acceptance.mjs` 對真實 Supabase 的四角色權限驗收（`npm run test:acceptance`）
+- `.github/workflows/keepalive.yml` 每天喚醒 Supabase，避免免費專案 7 天沒活動被暫停
 
 ## 開發規範
 - main 永遠可部署；功能開分支，合併前由另一人看過。

@@ -1,0 +1,20 @@
+# Supabase 免費專案 7 天沒有活動會被暫停；每天呼叫一次公開 RPC 保持喚醒。
+# 這裡用的是 publishable（anon）key，本來就會出現在前端程式裡，不是機密；service_role 絕不可放進來。
+name: supabase-keepalive
+on:
+  schedule:
+    - cron: '17 1 * * *' # 每天台灣時間 09:17
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 呼叫 get_map_spots
+        env:
+          SUPABASE_URL: https://kelrouzoxxogvmvrvhlr.supabase.co
+          SUPABASE_ANON_KEY: sb_publishable_Tglm1duJDhQbGEfgmz_zXA_-ZG9RvzQ
+        run: |
+          curl -fsS -X POST "$SUPABASE_URL/rest/v1/rpc/get_map_spots" \
+            -H "apikey: $SUPABASE_ANON_KEY" -H "Content-Type: application/json" \
+            -d '{"min_lng":121.5,"min_lat":25.0,"max_lng":121.6,"max_lat":25.1}' -o /dev/null

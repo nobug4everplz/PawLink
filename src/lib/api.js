@@ -56,8 +56,9 @@ export async function createAnimal(spotId, fields) {
   if (link.error) throw link.error
   return data
 }
+// tnr_updated_at 由資料庫 trigger 自動更新，前端沒有該欄位的寫入權，不可一併送出
 export async function updateTnrStage(animalId, stage) {
-  const { error } = await need().from('animals').update({ tnr_stage: stage, tnr_updated_at: new Date().toISOString() }).eq('id', animalId)
+  const { error } = await need().from('animals').update({ tnr_stage: stage }).eq('id', animalId)
   if (error) throw error
 }
 export async function uploadAnimalPhoto(animalId, blob) {
