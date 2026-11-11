@@ -16,7 +16,7 @@ const selectedId = ref(null)
 const showPanel = ref(false)
 const refreshKey = ref(0)
 const pending = ref([]) // 我還沒回報清理的餵食（餵食後 30 分鐘～24 小時）
-let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer
+let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer, zoneBounds
 const zoneCount = ref(0)
 const openReports = ref(0) // 我照顧的點還沒處理完的居民通報
 let spots = []
@@ -44,7 +44,15 @@ async function loadZones() {
       .addTo(zoneLayer)
   }
   zoneCount.value = zones.length
+  zoneBounds = zones.length ? L.geoJSON(zones.map((x) => x.geojson)).getBounds() : null
+  zoneLabels()
+  // 從宣導頁點熱區過來：縮放到該熱區
+  const z = route.query.zone && zones.find((x) => x.id === route.query.zone)
+  if (z) map.fitBounds(L.geoJSON(z.geojson).getBounds(), { padding: [24, 24] })
 }
+/** 縮到全臺時熱區名稱會疊在一起，縮放 10 以下先藏起來 */
+function showAllZones() { if (zoneBounds) map.fitBounds(zoneBounds, { padding: [24, 24] }) }
+function zoneLabels() { mapEl.value?.classList.toggle('hide-zone-labels', map.getZoom() < 10) }
 function select(id) { selectedId.value = id; showPanel.value = true }
 async function loadPending() {
   if (!auth.user) { pending.value = []; return }
@@ -88,6 +96,7 @@ onMounted(() => {
     meMarker = L.circleMarker(e.latlng, { radius: 8, color: '#fff', weight: 3, fillColor: '#1989fa', fillOpacity: 1 }).addTo(map)
   })
   map.on('locationerror', () => showToast('無法取得定位，請確認已允許位置權限（需 HTTPS）'))
+  map.on('zoomend', zoneLabels)
   map.on('moveend', () => { clearTimeout(timer); timer = setTimeout(loadSpots, 300) })
   // 長按（右鍵 / 手機長按）選點建檔
   map.on('contextmenu', (e) => addSpotAt(e.latlng))
@@ -127,7 +136,7 @@ watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending(); loadIn
     <van-badge v-if="auth.user" :content="openReports || ''" :show-zero="false" class="inbox" :class="{ shifted: pending.length }">
       <van-button size="small" round plain icon="envelop-o" @click="router.push({ name: 'inbox' })">居民通報</van-button>
     </van-badge>
-    <div v-if="zoneCount" class="legend"><i class="red" />保育熱區<i class="yellow" />200 公尺警示帶</div>
+    <div v-if="zoneCount" class="legend" @click="showAllZones"><i class="red" />保育熱區 {{ zoneCount }} 處<i class="yellow" />200 公尺警示帶<span class="all">看全部</span></div>
     <div class="fabs">
       <van-button round icon="aim" type="primary" class="fab" @click="locate" />
       <van-button round icon="plus" type="success" class="fab" @click="addHere" />
@@ -149,6 +158,8 @@ watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending(); loadIn
 .links { position: absolute; top: 12px; left: 12px; z-index: 1000; display: flex; gap: 8px; }
 .links .van-button { background: #fff; }
 .legend { position: absolute; left: 12px; bottom: 28px; z-index: 1000; background: rgba(255,255,255,.92); border-radius: 8px; padding: 4px 10px; font-size: 12px; color: #444; display: flex; align-items: center; gap: 4px; }
+.legend { cursor: pointer; }
+.legend .all { margin-left: 6px; color: #1989fa; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 4px; }
 .legend i.red { background: rgba(224,62,62,.45); border: 1px solid #e03e3e; }
 .legend i.yellow { background: rgba(242,183,5,.35); border: 1px dashed #d99a00; }

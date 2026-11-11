@@ -33,6 +33,7 @@ const back = () => (window.history.length > 1 ? router.back() : router.replace('
         <div><b class="name">{{ s.name }}</b><i class="sci">{{ s.sci }}</i><div><van-tag plain type="danger">{{ s.status }}</van-tag></div></div>
       </div>
       <ul><li v-for="f in s.facts" :key="f">{{ f }}</li></ul>
+      <a v-if="s.url" class="more" :href="s.url" target="_blank" rel="noopener noreferrer">保育等級與資料來源 ↗</a>
     </div>
 
     <h3>餵食者可以做的四件事</h3>
@@ -43,21 +44,25 @@ const back = () => (window.history.length > 1 ? router.back() : router.replace('
     <template v-if="zones.length">
       <h3>平台目前標示的保育熱區</h3>
       <van-cell-group inset class="group">
-        <van-cell v-for="z in zones" :key="z.id" :title="z.name" :label="z.description || ''">
+        <van-cell v-for="z in zones" :key="z.id" :title="z.name" :label="z.description || ''" is-link
+                  @click="router.push({ name: 'map', query: { zone: z.id } })">
           <template #value>
             <van-tag v-if="z.species" type="danger" plain>{{ z.species }}</van-tag>
             <van-tag v-if="z.is_demo" plain style="margin-left:4px">示意</van-tag>
           </template>
         </van-cell>
       </van-cell-group>
-      <p class="note">標為「示意」的範圍是依公開文獻的大範圍自行繪製，不是官方圖資，也不代表動物的確切位置。</p>
+      <p class="note">點一下熱區可以在地圖上查看。標為「示意」的範圍是依公開資料以鄉鎮界線或手繪劃定，不是官方公告的棲地圖，也不代表動物的確切位置。</p>
     </template>
 
     <h3>支持保育與延伸閱讀</h3>
     <van-cell-group inset class="group">
-      <van-cell v-for="l in LINKS" :key="l.url" :title="l.title" :label="l.desc" is-link :url="l.url" target="_blank" rel="noopener noreferrer">
-        <template v-if="l.donate" #value><van-tag type="success">捐款支持</van-tag></template>
-      </van-cell>
+      <!-- 用真正的 <a> 開新分頁：van-cell 的 url 會在同一頁跳走，裝成 App 時回不來 -->
+      <a v-for="l in LINKS" :key="l.url" :href="l.url" target="_blank" rel="noopener noreferrer" class="ext">
+        <van-cell :title="l.title" :label="l.desc" is-link>
+          <template v-if="l.donate" #value><van-tag type="success">捐款支持</van-tag></template>
+        </van-cell>
+      </a>
     </van-cell-group>
     <p class="note">以上為外部網站連結。捐款由各單位自行收受與開立收據，本平台不經手任何款項。</p>
   </div>
@@ -83,5 +88,7 @@ h3 { margin: 22px 16px 10px; font-size: 16px; }
 .name { font-size: 17px; margin-right: 8px; }
 .sci { color: #888; font-size: 13px; }
 .group { margin: 0 16px; }
+.more { display: inline-block; margin: 6px 16px 0; font-size: 13px; color: #1f7a50; }
+.ext { display: block; color: inherit; }
 .note { margin: 8px 20px 0; color: #999; font-size: 12px; line-height: 1.6; }
 </style>
