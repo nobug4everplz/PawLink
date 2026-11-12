@@ -162,7 +162,7 @@ where id in (select id from auth.users where email in ('pawlink-qa-admin@example
 | 每日排程 | 本機裝 pg_cron 套用 migration，確認建立 `pawlink-sentinel-daily`（`0 20 * * *` UTC） | 通過 |
 | 介面流程 | 手機尺寸 Chromium，哨兵的 API 轉到本機資料庫：回報目擊、回報受傷、後台手動檢查、照顧者收到提醒、標記失蹤、再被看到後恢復 | 17 項全過 |
 | 還沒套用 migration 時 | 身分檔、通知頁、地圖照常運作，哨兵的區塊不顯示 | 通過 |
-| 正式資料庫 | `npm run test:acceptance` 新增最多 16 項哨兵檢查，migration `20261111000900` 還沒套用時自動略過 | 尚未執行，等 migration 套用 |
+| 正式資料庫 | `npm run test:acceptance` 新增最多 16 項哨兵檢查，migration `20261111000900` 還沒套用時自動略過 | 2026-11-12 migration 已套用到正式資料庫，全部驗收 192 項通過，沒有略過 |
 
 ## 已知限制
 
@@ -185,7 +185,7 @@ where id in (select id from auth.users where email in ('pawlink-qa-admin@example
 | 資料庫規則與權限 | 本機 PostgreSQL 16 + PostGIS，`50_shifts.sql` | 51 項全過（全部測試共 335 項） |
 | 介面流程 | 手機尺寸 Chromium，輪值的 API 轉到本機資料庫；瀏覽器時區故意設成洛杉磯，確認日期仍以臺灣時間計算 | 14 項全過 |
 | 還沒套用 migration 時 | 輪值頁顯示尚未套用，地圖照常運作 | 通過 |
-| 正式資料庫 | `npm run test:acceptance` 新增最多 18 項輪值檢查（含兩個帳號同時認領），migration `20261111001000` 還沒套用時自動略過 | 尚未執行，等 migration 套用 |
+| 正式資料庫 | `npm run test:acceptance` 新增最多 18 項輪值檢查（含兩個帳號同時認領），migration `20261111001000` 還沒套用時自動略過 | 2026-11-12 migration 已套用到正式資料庫，全部驗收 192 項通過，沒有略過 |
 
 ## 已知限制
 
@@ -209,7 +209,7 @@ where id in (select id from auth.users where email in ('pawlink-qa-admin@example
 | 資料庫規則與權限 | 本機 PostgreSQL 16 + PostGIS，`60_tnr_relay.sql` | 45 項全過（全部測試共 380 項） |
 | 介面流程 | 手機尺寸 Chromium，接力的 API 轉到本機資料庫：發起、三個帳號分別認領、依序完成、結案、取消 | 16 項全過 |
 | 還沒套用 migration 時 | 看板顯示尚未套用，身分檔照常運作 | 通過 |
-| 正式資料庫 | `npm run test:acceptance` 新增最多 14 項接力檢查（含兩個帳號同時認領），migration `20261111001100` 還沒套用時自動略過 | 尚未執行，等 migration 套用 |
+| 正式資料庫 | `npm run test:acceptance` 新增最多 14 項接力檢查（含兩個帳號同時認領），migration `20261111001100` 還沒套用時自動略過 | 2026-11-12 migration 已套用到正式資料庫，全部驗收 192 項通過，沒有略過 |
 
 ## 已知限制
 
@@ -233,7 +233,7 @@ where id in (select id from auth.users where email in ('pawlink-qa-admin@example
 | 資料庫規則與權限 | 本機 PostgreSQL 16 + PostGIS，`70_adoption.sql` | 56 項全過（全部測試共 436 項） |
 | 介面流程 | 手機尺寸 Chromium，領養的 API 轉到本機資料庫：登記、確認、填問卷、陪伴者看到狀況、退養 | 18 項全過 |
 | 還沒套用 migration 時 | 領養頁顯示尚未套用，身分檔照常運作 | 通過 |
-| 正式資料庫 | `npm run test:acceptance` 新增 19 項領養檢查，migration `20261111001200` 還沒套用時自動略過 | 尚未執行，等 migration 套用 |
+| 正式資料庫 | `npm run test:acceptance` 新增 19 項領養檢查，migration `20261111001200` 還沒套用時自動略過 | 2026-11-12 migration 已套用到正式資料庫，全部驗收 192 項通過，沒有略過 |
 
 測試中發現並修正：`cancel_tnr_case` 與 `cancel_adoption` 的權限判斷遇到空值（發起人帳號被刪除、沒有陪伴者）時會略過檢查，已改用 `is not distinct from`，並補上測試。
 
