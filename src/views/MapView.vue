@@ -2,7 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import L, { loadCluster } from '../lib/leaflet'
-import { showToast } from 'vant'
+import { showToast, showConfirmDialog } from 'vant'
 import { auth, signOut, isAdmin } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
 import { net, flushQueue, onFlushed, refreshQueueCount } from '../lib/offlineQueue'
@@ -16,7 +16,8 @@ const selectedId = ref(null)
 const showPanel = ref(false)
 const refreshKey = ref(0)
 const pending = ref([]) // 我還沒回報清理的餵食（餵食後 30 分鐘～24 小時）
-let map, cluster, meMarker, timer, unsub, pendingTimer, zoneLayer, zoneBounds, offFlushed
+let map, cluster, meMarker, timer, rtTimer, unsub, pendingTimer, zoneLayer, zoneBounds, offFlushed
+let loadSeq = 0
 const showingCached = ref(false)
 const showInstall = ref(false)
 const zoneCount = ref(0)
@@ -27,8 +28,12 @@ const openReports = ref(0) // 我照顧的點還沒處理的居民通報，加�
 let spots = []
 
 async function loadSpots() {
+  if (!map) return // 已離開頁面
+  const seq = ++loadSeq
   try {
-    spots = await fetchMapSpots(map.getBounds())
+    const list = await fetchMapSpots(map.getBounds())
+    if (!map || seq !== loadSeq) return // 地圖又移動過，這份結果已經過時
+    spots = list
     showingCached.value = !!spots.offline
     cluster.clearLayers()
     for (const s of spots) {
@@ -51,8 +56,11 @@ async function loadZones() {
   zoneLayer.clearLayers()
   for (const z of zones) {
     L.geoJSON(z.buffer_geojson, { interactive: false, style: { color: '#d99a00', weight: 1.5, dashArray: '6 6', fillColor: '#f2b705', fillOpacity: 0.12 } }).addTo(zoneLayer)
+    // Leaflet 會把字串當成 HTML 插入，熱區名稱是使用者輸入的文字，改用文字節點
+    const label = document.createElement('span')
+    label.textContent = `保育熱區：${z.name}${z.is_demo ? '（示意）' : ''}`
     L.geoJSON(z.geojson, { interactive: false, style: { color: '#e03e3e', weight: 2, fillColor: '#e03e3e', fillOpacity: 0.18 } })
-      .bindTooltip(`保育熱區：${z.name}${z.is_demo ? '（示意）' : ''}`, { permanent: true, direction: 'center', className: 'zone-label' })
+      .bindTooltip(label, { permanent: true, direction: 'center', className: 'zone-label' })
       .addTo(zoneLayer)
   }
   zoneCount.value = zones.length
@@ -91,6 +99,10 @@ async function goPending() {
   select(p.spot_id)
 }
 
+async function logout() {
+  try { await showConfirmDialog({ title: '登出', message: net.count ? `還有 ${net.count} 筆餵食紀錄沒補傳，登出後要再登入同一個帳號才會補傳。確定要登出嗎？` : '確定要登出嗎？' }) } catch { return }
+  await signOut()
+}
 function locate() { map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true }) }
 
 function addSpotAt(latlng) {
@@ -104,7 +116,7 @@ onMounted(async () => {
   await loadCluster()
   if (!mapEl.value) return // 外掛載入期間已離開頁面
   map = L.map(mapEl.value, { zoomControl: false }).setView([25.0174, 121.5398], 15)
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map)
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors' }).addTo(map)
   cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 50 })
   map.addLayer(cluster)
   zoneLayer = L.layerGroup().addTo(map)
@@ -129,7 +141,11 @@ onMounted(async () => {
       .then((s) => { if (s?.lat != null) { map.setView([s.lat, s.lng], 17); select(id) } else loadSpots() })
       .catch(() => loadSpots())
   } else loadSpots()
-  unsub = subscribeFeeding(() => { loadSpots(); loadPending(); refreshKey.value++ })
+  // 短時間內多筆變動合併成一次重新載入，避免每一筆餵食都讓所有人各打一輪請求
+  unsub = subscribeFeeding(() => {
+    clearTimeout(rtTimer)
+    rtTimer = setTimeout(() => { loadSpots(); loadPending(); refreshKey.value++ }, 1500)
+  })
   loadPending(); loadInbox()
   offFlushed = onFlushed(({ sent, dropped }) => {
     if (sent) showToast(`已補傳 ${sent} 筆離線餵食紀錄`)
@@ -142,7 +158,7 @@ onMounted(async () => {
   pendingTimer = setInterval(() => { loadPending(); loadInbox() }, 5 * 60e3)
 })
 function dismissInstall() { showInstall.value = false; try { localStorage.setItem('pawlink:install-tip', '1') } catch { /* ignore */ } }
-onBeforeUnmount(() => { unsub?.(); offFlushed?.(); clearInterval(pendingTimer); map?.remove() })
+onBeforeUnmount(() => { unsub?.(); offFlushed?.(); clearInterval(pendingTimer); clearTimeout(timer); clearTimeout(rtTimer); map?.remove(); map = null })
 watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending(); loadInbox(); refreshQueueCount().then(() => flushQueue()) } })
 watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
 </script>
@@ -155,7 +171,7 @@ watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
     </van-notice-bar>
     <div class="top" :class="{ shifted: pending.length }">
       <van-button v-if="!auth.user" size="small" round type="primary" @click="router.push('/login')">登入</van-button>
-      <van-button v-else size="small" round plain @click="signOut">{{ auth.profile?.display_name || '已登入' }}・登出</van-button>
+      <van-button v-else size="small" round plain @click="logout">{{ auth.profile?.display_name || '已登入' }}・登出</van-button>
     </div>
     <div class="links" :class="{ shifted: pending.length }">
       <van-button size="small" round plain type="success" icon="flower-o" @click="router.push({ name: 'conservation' })">保育</van-button>

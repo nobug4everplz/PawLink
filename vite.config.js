@@ -41,7 +41,9 @@ export default defineConfig({
             options: {
               cacheName: 'osm-tiles',
               expiration: { maxEntries: 400, maxAgeSeconds: 7 * 24 * 3600 },
-              cacheableResponse: { statuses: [0, 200] },
+              // 圖磚以 CORS 載入（tileLayer 的 crossOrigin），只快取看得到狀態的回應；
+              // 不透明回應在 Chrome 每筆會以數 MB 計入配額，會擠壓離線紀錄的空間
+              cacheableResponse: { statuses: [200] },
             },
           },
           {
