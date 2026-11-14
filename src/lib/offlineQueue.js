@@ -43,6 +43,17 @@ export function isNetworkError(e) {
   return !e?.code && /failed to fetch|networkerror|load failed|network request failed|fetch failed/i.test(String(e?.message || e))
 }
 
+/**
+ * 伺服器明確拒絕這筆資料本身（重送幾次結果都一樣）：
+ * 違反檢查限制（例如超過 7 天）、餵食點已刪除、資料格式不對，或被 RLS 擋下（餵食點已停用）。
+ * 其他錯誤（登入過期、沒有權限呼叫、5xx、請求過多）都可能只是暫時的，不能因此丟掉紀錄。
+ */
+export function isPermanentError(e) {
+  const code = String(e?.code || '')
+  if (['23514', '23503', '23502', '22P02', '22023', '22007', '22008'].includes(code)) return true
+  return code === '42501' && /row-level security/i.test(String(e?.message || ''))
+}
+
 export async function enqueueFeeding(item) {
   await tx('readwrite', (s) => s.put(item))
   await refresh()
@@ -61,8 +72,9 @@ export async function flushQueue() {
         p_spot_id: it.spot_id, p_food_type: it.food_type, p_note: it.note || null, p_fed_at: it.fed_at, p_client_id: it.client_id,
       })
       if (!error) { await remove(it.client_id); sent++; continue }
-      if (isNetworkError(error)) break // 還是沒網路，下次再試
-      await remove(it.client_id)        // 伺服器明確拒絕，重送也不會成功
+      // 只有確定重送也不會成功的才放棄；登入過期、伺服器忙碌這類暫時性的錯誤一律留著下次再試
+      if (!isPermanentError(error)) { console.warn('補傳暫時失敗，下次再試', error); break }
+      await remove(it.client_id)
       dropped.push({ ...it, reason: error.message })
     }
   } catch (e) { console.warn('補傳失敗', e) } finally {

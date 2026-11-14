@@ -34,7 +34,7 @@ onMounted(async () => {
   await loadGeoman()
   if (!mapEl.value) return
   map = L.map(mapEl.value, { zoomControl: true }).setView([24.45, 120.78], 12) // 預設在苗栗淺山一帶
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map)
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors' }).addTo(map)
   map.pm.setLang('zh_tw')
   map.on('pm:create', (e) => { setLayer(e.layer); showForm.value = true })
 
