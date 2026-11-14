@@ -12,7 +12,7 @@ const name = ref(''), description = ref('')
 const nearby = ref([]), busy = ref(false), alert = ref(null)
 
 onMounted(async () => {
-  if (!Number.isFinite(lat.value) || !Number.isFinite(lng.value) || Math.abs(lat.value) > 90 || Math.abs(lng.value) > 180) return router.replace('/')
+  if (Number.isNaN(lat.value)) return router.replace('/')
   checkAlert(lat.value, lng.value).then((a) => { alert.value = a })
   try { nearby.value = await findNearbySpots(lat.value, lng.value) } catch (e) { showToast(e.message) }
 })
