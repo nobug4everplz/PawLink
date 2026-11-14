@@ -153,10 +153,13 @@ let animalId
   ok('訪客可讀動物檔（公開進度）', allowed(await guest.from('animals').select('id,name,tnr_stage,is_sterilized').eq('id', animalId)))
   ok('訪客不能改動物', denied(await guest.from('animals').update({ tnr_stage: 5 }).eq('id', animalId).select('id')))
   // 與前端 updateTnrStage 相同的寫法
-  const t = await user.c.from('animals').update({ tnr_stage: 2 }).eq('id', animalId).select('tnr_stage,is_sterilized,tnr_updated_at').single()
-  ok('建檔者可更新 TNR 階段（2 誘捕中 → 仍未結紮）', t.data?.tnr_stage === 2 && t.data.is_sterilized === false, msg(t))
-  const t3 = await care.c.from('animals').update({ tnr_stage: 3 }).eq('id', animalId).select('tnr_stage,is_sterilized').single()
-  ok('照顧者可更新出沒在自己點的動物；階段 3 起自動標記已結紮', t3.data?.is_sterilized === true, msg(t3))
+  const t3 = await care.c.from('animals').update({ tnr_stage: 3 }).eq('id', animalId).select('tnr_stage,is_sterilized,tnr_updated_at').single()
+  ok('照顧者可更新出沒在自己點的動物；階段 3 起自動標記已結紮', t3.data?.tnr_stage === 3 && t3.data.is_sterilized === true, msg(t3))
+  // 0013：每隻動物的結紮階段一天只能改一次（建檔者也一樣；管理員不受限）
+  const t4 = await user.c.from('animals').update({ tnr_stage: 4 }).eq('id', animalId).select('id')
+  ok('結紮階段一天只能改一次：同一天第二次修改被擋', /一天只能改一次/.test(t4.error?.message || ''), msg(t4))
+  ok('不能直接改餵食紀錄的備註（清理只能走 report_cleanup）', denied(await user.c.from('feeding_logs').update({ note: 'hacked' }).eq('id', logUser).select('id')))
+  ok('新增餵食紀錄不能自帶 created_at', denied(await user.c.from('feeding_logs').insert({ spot_id: spotId, created_at: new Date(Date.now() + 365 * 86400e3).toISOString(), fed_at: new Date(Date.now() + 365 * 86400e3).toISOString() }).select('id')))
   ok('不能手動改 is_sterilized', denied(await user.c.from('animals').update({ is_sterilized: false }).eq('id', animalId).select('id')))
   ok('TNR 階段超出 1～5 被拒', denied(await user.c.from('animals').update({ tnr_stage: 6 }).eq('id', animalId).select('id')))
   let s = (await guest.rpc('get_spot_summary', { p_spot_id: spotId })).data; s = Array.isArray(s) ? s[0] : s
@@ -446,9 +449,12 @@ if (admin) {
     ok('不是認領者不能回報完成', !!(await loser.c.rpc('complete_tnr_task', { p_task_id: last.task_id })).error)
     if (todo.length > 1) ok('前一步還沒完成，不能先回報後面的步驟', !!(await winner.c.rpc('complete_tnr_task', { p_task_id: last.task_id })).error)
     let stageNow = before
-    for (const t of todo.slice(0, -1)) {
-      await loser.c.rpc('claim_tnr_task', { p_task_id: t.task_id })
-      const r = await loser.c.rpc('complete_tnr_task', { p_task_id: t.task_id })
+    // 0013：同一個人一天只能回報同一個案件的一個步驟，中間的步驟分給不同帳號
+    const helpers = [loser, user, admin].filter(Boolean)
+    for (const [i, t] of todo.slice(0, -1).entries()) {
+      const h = helpers[i % helpers.length]
+      await h.c.rpc('claim_tnr_task', { p_task_id: t.task_id })
+      const r = await h.c.rpc('complete_tnr_task', { p_task_id: t.task_id })
       ok(`完成第 ${t.step_no} 步後結紮階段自動變成 ${t.step_no + 1}`, !r.error && r.data === t.step_no + 1, msg(r))
       stageNow = r.data
     }
