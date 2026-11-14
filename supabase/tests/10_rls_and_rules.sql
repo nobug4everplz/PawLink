@@ -52,8 +52,8 @@ insert into auth.users (id, email, raw_user_meta_data) values
   ('00000000-0000-0000-0000-00000000000e', 'stranger@test.tw', '{"display_name":"路人"}');
 update public.profiles set role = 'admin' where id = '00000000-0000-0000-0000-00000000000a';
 
-select test.ok((select display_name from public.profiles where id = '00000000-0000-0000-0000-00000000000d') = 'user',
-               '註冊時自動建立 profile，沒填暱稱用 email 前綴');
+select test.ok((select display_name from public.profiles where id = '00000000-0000-0000-0000-00000000000d') = '使用者0000',
+               '註冊時自動建立 profile，沒填暱稱用「使用者＋編號」（不用 email 前綴）');
 
 \set ADMIN    '''00000000-0000-0000-0000-00000000000a'''
 \set OWNER    '''00000000-0000-0000-0000-00000000000b'''
@@ -238,7 +238,7 @@ select test.ok(test.affects($$update public.animals set cover_photo_id = (select
 set role anon; select set_config('request.jwt.claim.sub', '', false);
 select test.ok((select count(*) from public.animals) = 1, '訪客看得到動物身分檔');
 select test.ok((select count(*) from public.animal_photos) = 1, '訪客看得到動物照片');
-select test.ok((select count(*) from storage.objects where bucket_id = 'animal-photos') = 1, '訪客讀得到照片檔');
+select test.ok((select count(*) from storage.objects where bucket_id = 'animal-photos') = 0, '訪客列不出照片檔（公開網址仍可直接開）');
 select test.throws($$insert into public.animals (name) values ('訪客貓')$$, '訪客不能建檔');
 select test.throws($$update public.animals set name = 'x'$$, '訪客不能改動物');
 
