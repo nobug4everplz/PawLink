@@ -4,7 +4,12 @@ import Components from 'unplugin-vue-components/vite'
 import { VantResolver } from 'unplugin-vue-components/resolvers'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// 顯示在「我的」頁最下面的版本字樣：部署時的 commit 與建置時間，方便確認手機上是不是最新版
+const sha = (process.env.VERCEL_GIT_COMMIT_SHA || 'dev').slice(0, 7)
+const builtAt = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(`${sha}（${builtAt}）`) },
   build: {
     rollupOptions: {
       // Geoman 只有管理員畫熱區才用到，獨立成一包，不預先快取到所有人的手機
