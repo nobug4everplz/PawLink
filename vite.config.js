@@ -5,6 +5,12 @@ import { VantResolver } from 'unplugin-vue-components/resolvers'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      // Geoman 只有管理員畫熱區才用到，獨立成一包，不預先快取到所有人的手機
+      output: { manualChunks: (id) => (id.includes('leaflet-geoman') ? 'geoman' : undefined) },
+    },
+  },
   plugins: [
     vue(),
     Components({ resolvers: [VantResolver()] }),
@@ -31,6 +37,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
+        globIgnores: ['**/geoman-*'],
         navigateFallback: '/index.html',
         cleanupOutdatedCaches: true,
         runtimeCaching: [

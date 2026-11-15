@@ -73,12 +73,13 @@ export async function getAnimal(id) {
   if (error) throw error
   return data
 }
-export async function createAnimal(spotId, fields) {
-  const { data, error } = await need().from('animals').insert(fields).select().single()
-  if (error) throw error
-  const link = await need().from('spot_animals').insert({ spot_id: spotId, animal_id: data.id })
-  if (link.error) throw link.error
-  return data
+// 單一 RPC（同一筆交易）：動物與餵食點關聯一起成功或一起失敗
+export async function createAnimal(spotId, f) {
+  const id = await rpc('create_animal', {
+    p_spot_id: spotId, p_name: f.name, p_species: f.species, p_sex: f.sex,
+    p_coat: f.coat ?? null, p_features: f.features ?? null, p_ear_tipped: !!f.ear_tipped, p_tnr_stage: f.tnr_stage ?? 1,
+  })
+  return { id }
 }
 // tnr_updated_at 由資料庫 trigger 自動更新，前端沒有該欄位的寫入權，不可一併送出
 export async function updateTnrStage(animalId, stage) {
