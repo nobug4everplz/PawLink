@@ -12,12 +12,18 @@ import zhTW from 'vant/es/locale/lang/zh-TW'
 Locale.use('zh-TW', zhTW) // Vant 預設是簡體中文
 
 import { initOfflineQueue } from './lib/offlineQueue'
+import { initUpdates, isChunkError } from './lib/update'
 
 const app = createApp(App)
 // 避免任何錯誤造成整頁白畫面：顯示訊息並留在原頁
 app.config.errorHandler = (err) => { console.error(err); showToast('發生錯誤：' + (err?.message || err)) }
-window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); showToast('發生錯誤：' + (e.reason?.message || e.reason)) })
+window.addEventListener('unhandledrejection', (e) => {
+  console.error(e.reason)
+  if (isChunkError(e.reason)) return // 新版上線後舊頁面載不到分頁程式：由 router.onError 重新整理（見 lib/update.js）
+  showToast('發生錯誤：' + (e.reason?.message || e.reason))
+})
 app.use(router).mount('#app')
 initOfflineQueue()
+initUpdates()
 // Android／桌面 Chrome 的安裝事件可能在安裝教學頁載入前就觸發，先留著
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); window.__pwaPrompt = e })

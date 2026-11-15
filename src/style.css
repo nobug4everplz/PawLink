@@ -119,6 +119,8 @@ body .van-tab--active { font-weight: 700; }
 body .van-popup--bottom.van-popup--round { box-shadow: 0 -6px 30px rgba(31, 42, 36, .16); }
 body .van-notice-bar { border-radius: 0; }
 body .van-field__label { font-weight: 500; }
+/* Toast 是建在 Popup 上的：Popup 的樣式若排在後面，白底會蓋掉 Toast 的深色底，變成白底白字的空白框 */
+body .van-toast { background: rgba(31, 42, 36, .9); color: #fff; }
 body .van-empty__description { padding: 0 32px; text-align: center; line-height: 1.6; }
 
 /* ---------- 地圖 ---------- */
