@@ -27,7 +27,7 @@ const open = computed(() => tasks.value.filter((t) => t.status === 'open').lengt
 </script>
 
 <template>
-  <van-nav-bar title="TNR 接力" left-arrow @click-left="router.push('/')" />
+  <van-nav-bar title="TNR 接力" left-arrow @click-left="router.push({ name: 'me' })" />
   <van-empty v-if="unavailable" description="資料庫還沒有套用 TNR 接力功能" />
   <van-empty v-else-if="!loading && !cases.length" description="目前沒有進行中的 TNR 接力">
     <p class="how">到動物身分檔按「發起接力」，就能把誘捕、送醫、術後照顧、放回分給不同的人。</p>

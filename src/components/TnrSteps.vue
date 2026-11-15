@@ -64,7 +64,7 @@ function hint(t) {
 
 <style scoped>
 .dot { font-size: 18px; margin-right: 8px; color: #c8c9cc; align-self: center; }
-.done .dot { color: #2f9e6b; }
+.done .dot { color: var(--pl-green); }
 .ready :deep(.van-cell__title) { font-weight: 600; }
 .tnr-steps :deep(.van-cell__value) { flex: none; display: flex; gap: 6px; align-items: center; }
 .tnr-steps :deep(.van-cell__title) { flex: 1; min-width: 0; }

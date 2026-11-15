@@ -9,7 +9,7 @@ const route = useRoute(), router = useRouter()
 const id = route.params.id
 const s = ref(null), animals = ref([]), reports = ref([]), missing = ref(false)
 const STAGES = ['未結紮', '誘捕中', '已手術', '術後照護', '已原地回置']
-const FOOT = { fresh: ['6 小時內餵過', '#2f9e6b'], recent: ['24 小時內餵過', '#f2b705'], hungry: ['超過 24 小時沒有餵食紀錄', '#e03e3e'] }
+const FOOT = { fresh: ['6 小時內餵過', '#1f8459'], recent: ['24 小時內餵過', '#e39b00'], hungry: ['超過 24 小時沒有餵食紀錄', '#d9482f'] }
 
 onMounted(async () => {
   try {
@@ -67,8 +67,8 @@ h3 { margin: 22px 16px 10px; font-size: 16px; display: flex; align-items: center
 .foot { margin: 0 16px; color: #555; font-size: 14px; display: flex; align-items: center; gap: 6px; }
 .foot i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px; }
-.stats div { background: #f3f8f5; border-radius: 10px; padding: 12px 8px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
-.stats b { font-size: 24px; color: #1f7a50; }
+.stats div { background: #fff; box-shadow: var(--pl-shadow); border-radius: 16px; padding: 12px 8px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.stats b { font-size: 24px; color: var(--pl-green-dark); }
 .stats span { font-size: 13px; color: #333; }
 .stats small { font-size: 11px; color: #888; }
 .note { margin: 8px 20px 0; color: #999; font-size: 12px; line-height: 1.6; }

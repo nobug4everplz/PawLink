@@ -10,6 +10,7 @@ import { compressImage } from '../lib/image'
 const route = useRoute(), router = useRouter()
 const a = ref(null), canEdit = ref(false), saving = ref(false)
 const STAGES = ['未結紮', '誘捕中', '已手術', '術後照護', '已原地回置']
+const STAGE_HINT = ['還沒開始安排', '已安排誘捕', '手術完成，起算為已結紮', '手術後觀察恢復中', '已放回原本的地方']
 const SEX = { male: '公', female: '母', unknown: '未知' }
 const SPECIES = { cat: '貓', dog: '狗', other: '其他' }
 const STATUS = { missing: ['失蹤中', 'warning'], deceased: ['已過世', 'default'], adopted: ['已送養', 'primary'] }
@@ -81,17 +82,27 @@ async function addPhoto(it) {
   <van-nav-bar title="動物身分檔" left-arrow @click-left="router.back()" />
   <div v-if="a" class="wrap">
     <van-swipe v-if="a.animal_photos.length" class="photos" :autoplay="0">
-      <van-swipe-item v-for="p in a.animal_photos" :key="p.id"><img :src="photoUrl(p.storage_path)" /></van-swipe-item>
+      <van-swipe-item v-for="p in a.animal_photos" :key="p.id"><img :src="photoUrl(p.storage_path)" :alt="`${a.name} 的照片`" /></van-swipe-item>
     </van-swipe>
+    <div v-else class="nophoto"><span>{{ a.species === 'dog' ? '🐶' : a.species === 'cat' ? '🐱' : '🐾' }}</span><small>還沒有照片</small></div>
     <div class="head">
       <h2>{{ a.name }}</h2>
-      <van-tag v-if="a.is_sterilized" type="success" size="large">已結紮</van-tag>
-      <van-tag v-if="a.ear_tipped" plain size="large" style="margin-left:6px">剪耳</van-tag>
-      <van-tag v-if="STATUS[a.status]" :type="STATUS[a.status][1]" size="large" style="margin-left:6px">{{ STATUS[a.status][0] }}</van-tag>
+      <div class="chips">
+        <van-tag size="large">{{ SPECIES[a.species] }}・{{ SEX[a.sex] }}</van-tag>
+        <van-tag v-if="a.ear_tipped" size="large">剪耳</van-tag>
+        <van-tag v-if="STATUS[a.status]" :type="STATUS[a.status][1]" size="large">{{ STATUS[a.status][0] }}</van-tag>
+      </div>
+    </div>
+    <!-- 已結紮標記：一眼看得出結紮了沒，可編輯的人能直接推到下一階段 -->
+    <div class="ster-card" :class="a.is_sterilized ? 'ok' : 'no'" data-test="ster-card">
+      <span class="big" aria-hidden="true"><van-icon :name="a.is_sterilized ? 'success' : 'clock-o'" /></span>
+      <div class="txt">
+        <b>{{ a.is_sterilized ? '已結紮' : '尚未結紮' }}</b>
+        <span>目前階段：{{ STAGES[a.tnr_stage - 1] }}（{{ a.tnr_stage }}/5）</span>
+      </div>
+      <van-button v-if="canEdit && a.tnr_stage < 5" size="small" round type="primary" :loading="saving" data-test="next-stage" @click="setStage(a.tnr_stage + 1)">標記「{{ STAGES[a.tnr_stage] }}」</van-button>
     </div>
     <van-cell-group inset>
-      <van-cell title="種類" :value="SPECIES[a.species]" />
-      <van-cell title="性別" :value="SEX[a.sex]" />
       <van-cell v-if="a.coat" title="毛色" :value="a.coat" />
       <van-cell v-if="a.features" title="特徵" :label="a.features" />
       <van-cell v-if="a.last_seen_at" title="最後出現" :value="ago(a.last_seen_at)" />
@@ -110,9 +121,9 @@ async function addPhoto(it) {
     </template>
     <h4 class="sec">結紮（TNR）進度</h4>
     <van-cell-group inset class="stages">
-      <van-cell v-for="(s, i) in STAGES" :key="s" :title="`${i + 1}. ${s}`" :clickable="canEdit" :class="{ done: i + 1 < a.tnr_stage, now: i + 1 === a.tnr_stage }" @click="setStage(i + 1)">
-        <template #icon><van-icon :name="i + 1 <= a.tnr_stage ? 'checked' : 'circle'" class="dot" /></template>
-        <template #value><span v-if="i + 1 === a.tnr_stage">目前</span><span v-else-if="canEdit" class="set">設為此階段</span></template>
+      <van-cell v-for="(s, i) in STAGES" :key="s" :title="s" :label="STAGE_HINT[i]" :clickable="canEdit && i + 1 !== a.tnr_stage" :class="{ done: i + 1 < a.tnr_stage, now: i + 1 === a.tnr_stage }" @click="setStage(i + 1)">
+        <template #icon><span class="dot"><van-icon v-if="i + 1 < a.tnr_stage" name="success" /><template v-else>{{ i + 1 }}</template></span></template>
+        <template #value><span v-if="i + 1 === a.tnr_stage" class="cur">目前</span><span v-else-if="canEdit" class="set" :class="{ back: i + 1 < a.tnr_stage }">{{ i + 1 < a.tnr_stage ? '改回這裡' : '設為此階段' }}</span></template>
       </van-cell>
     </van-cell-group>
     <p v-if="canEdit" class="tip">點任一階段即可更新；「已手術」起會自動標記已結紮。每隻動物一天只能改一次，改之前請先確認。</p>
@@ -140,8 +151,8 @@ async function addPhoto(it) {
       <p v-if="!adoption" class="tip">把牠帶回家了嗎？登記後由照顧者確認，之後第 7、30、90 天會請你回報牠的近況。</p>
       <p v-else-if="adoption.my_role === 'caretaker' && adoption.status === 'pending'" class="tip">這筆登記在等你確認，點上面那一列處理。</p>
     </template>
-    <van-uploader v-if="canEdit" :after-read="addPhoto" style="margin:12px 16px">
-      <van-button size="small" icon="photograph">新增照片</van-button>
+    <van-uploader v-if="canEdit" :after-read="addPhoto" class="up">
+      <van-button size="small" round plain icon="photograph">新增照片</van-button>
     </van-uploader>
   </div>
   <van-popup v-model:show="showAdopt" position="bottom" round closeable>
@@ -167,21 +178,45 @@ async function addPhoto(it) {
 </template>
 
 <style scoped>
-.wrap { padding-bottom: 32px; }
-.photos img { width: 100%; height: 260px; object-fit: cover; }
-.head { display: flex; align-items: center; padding: 12px 16px 4px; }
-.head h2 { margin: 0 10px 0 0; }
-.sec { margin: 16px 16px 0; }
-.stages { margin-top: 8px; }
-.dot { font-size: 18px; margin-right: 8px; color: #c8c9cc; align-self: center; }
-.done .dot, .now .dot { color: #2f9e6b; }
-.now :deep(.van-cell__title) { font-weight: 600; color: #2f9e6b; }
-.set { color: #1989fa; }
-.tip { margin: 8px 16px; color: #999; font-size: 12px; }
-.sight-head { display: flex; align-items: center; justify-content: space-between; margin: 16px 16px 8px; }
-.sight-head h4 { margin: 0; }
-.sheet { padding: 20px 16px 24px; }
-.sheet h4 { margin: 0 32px 14px 0; }
+.wrap { padding-bottom: 40px; max-width: 720px; margin: 0 auto; }
+.photos { margin: 4px 16px 0; border-radius: 20px; overflow: hidden; box-shadow: var(--pl-shadow); }
+.photos img { display: block; width: 100%; height: 260px; object-fit: cover; }
+.nophoto { margin: 4px 16px 0; height: 132px; border-radius: 20px; background: linear-gradient(135deg, #e6f3ec, #f3ecd6); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.nophoto span { font-size: 52px; line-height: 1.1; }
+.nophoto small { color: var(--pl-sub); font-size: 12px; }
+.head { padding: 16px 20px 0; }
+.head h2 { margin: 0 0 8px; font-size: 26px; line-height: 1.2; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.ster-card { display: flex; align-items: center; gap: 12px; margin: 14px 16px 16px; padding: 14px; border-radius: 18px; }
+.ster-card.ok { background: var(--pl-green); color: #fff; box-shadow: 0 4px 14px rgba(31, 132, 89, .3); }
+.ster-card.no { background: var(--pl-amber-soft); color: var(--pl-amber-ink); }
+.ster-card .big { flex: none; width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background: rgba(255, 255, 255, .22); }
+.ster-card.no .big { background: rgba(227, 155, 0, .22); }
+.ster-card .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ster-card b { font-size: 20px; line-height: 1.25; }
+.ster-card .txt span { font-size: 13px; opacity: .92; }
+.ster-card .van-button { flex: none; }
+.ster-card.ok .van-button { background: #fff; color: var(--pl-green-dark); border-color: #fff; box-shadow: none; }
+
+.sec { margin: 22px 20px 0; font-size: 16px; }
+.stages { margin-top: 10px; }
+.stages :deep(.van-cell) { align-items: center; }
+.stages :deep(.van-cell__value) { flex: none; }
+.dot { flex: none; width: 26px; height: 26px; margin-right: 12px; border-radius: 50%; background: #eceae2; color: var(--pl-muted); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.done .dot { background: var(--pl-green-soft); color: var(--pl-green-dark); }
+.now .dot { background: var(--pl-green); color: #fff; box-shadow: 0 0 0 4px var(--pl-green-soft); }
+.now { background: #f4faf6; }
+.now :deep(.van-cell__title) { font-weight: 700; color: var(--pl-green-dark); }
+.cur { background: var(--pl-green); color: #fff; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 10px; }
+.set { color: var(--pl-green); font-size: 13px; font-weight: 600; }
+.set.back { color: var(--pl-muted); font-weight: 500; }
+.tip { margin: 8px 20px; color: var(--pl-muted); font-size: 12px; line-height: 1.6; }
+.sight-head { display: flex; align-items: center; justify-content: space-between; margin: 22px 20px 10px; }
+.sight-head h4 { margin: 0; font-size: 16px; }
+.up { margin: 16px 20px 0; }
+.sheet { padding: 22px 16px calc(24px + env(safe-area-inset-bottom)); }
+.sheet h4 { margin: 0 32px 14px 0; font-size: 17px; }
 .conds { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
-.note { background: #f7f8fa; border-radius: 8px; }
+.note { background: #f3f1ea; border-radius: 12px; }
 </style>

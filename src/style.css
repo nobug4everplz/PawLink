@@ -1,5 +1,145 @@
+/* =============================================================
+   PawLink 設計基礎：顏色、字體、圓角、陰影，以及 Vant 元件的全站調整
+   顏色語意：綠＝剛餵過／已結紮，琥珀＝一陣子前／進行中，紅＝久未餵食／警示
+   ============================================================= */
+:root {
+  --pl-green: #1f8459;
+  --pl-green-dark: #166544;
+  --pl-green-soft: #e6f3ec;
+  --pl-amber: #e39b00;
+  --pl-amber-soft: #fff3d1;
+  --pl-amber-ink: #7a5200;
+  --pl-red: #d9482f;
+  --pl-red-soft: #fdebe7;
+  --pl-red-ink: #a32a15;
+  --pl-ink: #1f2a24;
+  --pl-sub: #56635b;
+  --pl-muted: #8d9992;
+  --pl-line: #e9e6dc;
+  --pl-bg: #f6f4ee;
+  --pl-card: #ffffff;
+  --pl-radius: 16px;
+  --pl-shadow: 0 1px 2px rgba(31, 42, 36, .05), 0 4px 14px rgba(31, 42, 36, .06);
+  --pl-shadow-float: 0 2px 6px rgba(31, 42, 36, .12), 0 8px 24px rgba(31, 42, 36, .12);
+  --pl-tabbar-h: 0px;
+}
+
+/* 兩層 :root 讓這裡的設定蓋過 Vant 的預設值 */
+:root:root {
+  --van-primary-color: var(--pl-green);
+  --van-success-color: var(--pl-green);
+  --van-warning-color: var(--pl-amber);
+  --van-danger-color: var(--pl-red);
+  --van-text-color: var(--pl-ink);
+  --van-text-color-2: var(--pl-sub);
+  --van-text-color-3: var(--pl-muted);
+  --van-background: var(--pl-bg);
+  --van-background-2: var(--pl-card);
+  --van-border-color: var(--pl-line);
+  --van-radius-md: 8px;
+  --van-radius-lg: var(--pl-radius);
+  --van-font-size-md: 15px;
+  --van-nav-bar-height: 52px;
+  --van-nav-bar-background: var(--pl-bg);
+  --van-nav-bar-title-font-size: 17px;
+  --van-nav-bar-icon-color: var(--pl-ink);
+  --van-nav-bar-text-color: var(--pl-green);
+  --van-nav-bar-arrow-size: 20px;
+  --van-button-default-height: 46px;
+  --van-button-small-height: 34px;
+  --van-button-small-font-size: 13px;
+  --van-button-default-font-size: 16px;
+  --van-button-plain-background: var(--pl-card);
+  --van-cell-vertical-padding: 13px;
+  --van-cell-font-size: 15px;
+  --van-cell-label-font-size: 13px;
+  --van-cell-label-color: var(--pl-muted);
+  --van-cell-value-color: var(--pl-sub);
+  --van-cell-group-inset-radius: var(--pl-radius);
+  --van-cell-group-inset-padding: 0 16px;
+  --van-field-label-color: var(--pl-sub);
+  --van-popup-round-radius: 22px;
+  --van-tag-radius: 6px;
+  --van-tag-padding: 1px 6px;
+  --van-tag-font-size: 12px;
+  --van-tabs-bottom-bar-color: var(--pl-green);
+  --van-tab-active-text-color: var(--pl-ink);
+  --van-tab-text-color: var(--pl-muted);
+  --van-radio-checked-icon-color: var(--pl-green);
+  --van-checkbox-checked-icon-color: var(--pl-green);
+  --van-switch-on-background: var(--pl-green);
+  --van-notice-bar-height: auto;
+  --van-notice-bar-padding: 10px 16px;
+  --van-notice-bar-font-size: 13px;
+  --van-notice-bar-line-height: 1.55;
+  --van-dialog-radius: 20px;
+  --van-dialog-confirm-button-text-color: var(--pl-green);
+  --van-toast-radius: 12px;
+  --van-toast-font-size: 14px;
+  --van-toast-text-padding: 10px 16px;
+  --van-empty-description-color: var(--pl-sub);
+  --van-empty-description-font-size: 15px;
+  --van-badge-background: var(--pl-red);
+  --van-action-sheet-header-font-size: 17px;
+}
+
 html, body, #app { height: 100%; margin: 0; }
-body { font-family: -apple-system, "Noto Sans TC", sans-serif; }
-.zone-label { background: rgba(255,255,255,.85); border: 1px solid #e03e3e; color: #b42318; font-size: 12px; padding: 1px 6px; box-shadow: none; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Helvetica Neue", sans-serif;
+  background: var(--pl-bg);
+  color: var(--pl-ink);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+h1, h2, h3, h4 { color: var(--pl-ink); letter-spacing: .01em; }
+a { color: var(--pl-green); }
+
+/* ---------- Vant 元件 ----------
+   元件樣式是按需載入的，順序可能排在這個檔案後面，所以選擇器前面加 body 提高優先權 */
+body .van-nav-bar { background: var(--pl-bg); position: sticky; top: 0; z-index: 20; }
+body .van-nav-bar::after { display: none; }
+body .van-nav-bar__title { font-weight: 700; }
+body .van-nav-bar__text { font-weight: 600; }
+body .van-cell-group--inset { box-shadow: var(--pl-shadow); }
+body .van-button { font-weight: 600; }
+body .van-button--small { padding: 0 14px; }
+body .van-button--mini { font-weight: 600; height: 28px; padding: 0 10px; border-radius: 14px; }
+body .van-button--primary, body .van-button--success { box-shadow: 0 2px 8px rgba(31, 132, 89, .28); }
+body .van-button--plain { box-shadow: none; }
+body .van-button--default { border-color: var(--pl-line); color: var(--pl-ink); }
+body .van-tag { font-weight: 600; }
+body .van-tag--success:not(.van-tag--plain) { background: var(--pl-green-soft); color: var(--pl-green-dark); }
+body .van-tag--warning:not(.van-tag--plain) { background: var(--pl-amber-soft); color: var(--pl-amber-ink); }
+body .van-tag--danger:not(.van-tag--plain) { background: var(--pl-red-soft); color: var(--pl-red-ink); }
+body .van-tag--primary:not(.van-tag--plain) { background: var(--pl-green-soft); color: var(--pl-green-dark); }
+body .van-tag--default:not(.van-tag--plain) { background: #eceae2; color: var(--pl-sub); }
+body .van-tag--large { padding: 3px 9px; font-size: 13px; border-radius: 8px; }
+body .van-tabs__nav { background: transparent; }
+body .van-tab--active { font-weight: 700; }
+body .van-popup--bottom.van-popup--round { box-shadow: 0 -6px 30px rgba(31, 42, 36, .16); }
+body .van-notice-bar { border-radius: 0; }
+body .van-field__label { font-weight: 500; }
+body .van-empty__description { padding: 0 32px; text-align: center; line-height: 1.6; }
+
+/* ---------- 地圖 ---------- */
+.leaflet-container { background: #e9ede3; font-family: inherit; }
+.leaflet-control-attribution { font-size: 10px; background: rgba(255, 255, 255, .7) !important; border-radius: 6px 0 0 0; }
+.zone-label { background: rgba(255,255,255,.9); border: 1px solid var(--pl-red); color: var(--pl-red-ink); font-size: 12px; font-weight: 600; padding: 1px 7px; border-radius: 8px; box-shadow: none; }
 .zone-label::before { display: none; }
 .hide-zone-labels .zone-label { display: none; }
+
+/* 餵食點標記：水滴形圖釘，顏色代表多久沒餵；下方小標是已結紮／總數 */
+.paw-pin { position: relative; width: 44px; height: 54px; }
+.paw-pin .drop { position: absolute; left: 4px; top: 0; width: 36px; height: 36px; border-radius: 50% 50% 50% 4px; transform: rotate(-45deg); background: var(--c); border: 3px solid #fff; box-shadow: 0 3px 8px rgba(31, 42, 36, .35); box-sizing: border-box; }
+.paw-pin svg { position: absolute; left: 13px; top: 9px; width: 18px; height: 18px; fill: #fff; }
+.paw-pin .ster { position: absolute; left: 50%; top: 38px; transform: translateX(-50%); white-space: nowrap; background: #fff; color: var(--pl-sub); font-size: 10px; font-weight: 700; line-height: 15px; padding: 0 5px; border-radius: 8px; box-shadow: 0 1px 3px rgba(31, 42, 36, .3); }
+.paw-pin .ster.all { background: var(--pl-green); color: #fff; }
+.paw-pin.hungry .drop { animation: pl-pulse 2.2s ease-out infinite; }
+@keyframes pl-pulse {
+  0% { box-shadow: 0 3px 8px rgba(31, 42, 36, .35), 0 0 0 0 rgba(217, 72, 47, .5); }
+  70% { box-shadow: 0 3px 8px rgba(31, 42, 36, .35), 0 0 0 12px rgba(217, 72, 47, 0); }
+  100% { box-shadow: 0 3px 8px rgba(31, 42, 36, .35), 0 0 0 0 rgba(217, 72, 47, 0); }
+}
+@media (prefers-reduced-motion: reduce) { .paw-pin.hungry .drop { animation: none; } }
+.marker-cluster { background: rgba(31, 132, 89, .22) !important; }
+.marker-cluster div { background: var(--pl-green) !important; color: #fff; font-weight: 700; font-family: inherit; }

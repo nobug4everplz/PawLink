@@ -32,14 +32,14 @@ const back = () => (window.history.length > 1 ? router.back() : router.replace('
 <template>
   <van-nav-bar title="通報問題" left-arrow @click-left="back" />
   <div v-if="done" class="done">
-    <van-icon name="passed" size="56" color="#2f9e6b" />
+    <van-icon name="passed" size="56" color="#1f8459" />
     <h3>已送出，謝謝你的通報</h3>
     <p>這個餵食點的照顧者會收到通知。通報內容只有照顧者與管理員看得到，處理進度會公開在進度頁。</p>
     <van-button round type="primary" @click="router.replace({ name: 'spot-progress', params: { id: route.params.id } })">查看處理進度</van-button>
     <van-button round plain style="margin-top:12px" @click="router.replace('/')">回地圖</van-button>
   </div>
   <template v-else>
-    <van-notice-bar wrapable :scrollable="false" left-icon="shield-o" color="#1f7a50" background="#e8f6ef">
+    <van-notice-bar wrapable :scrollable="false" left-icon="shield-o" color="#166544" background="#e6f3ec">
       不用登入，也不會記錄你的身分。通報內容只有這個餵食點的照顧者與管理員看得到。
     </van-notice-bar>
     <van-form @submit="submit">

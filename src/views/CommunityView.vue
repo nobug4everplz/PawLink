@@ -27,7 +27,7 @@ const filled = (v) => v.trim().length > 0
 </script>
 
 <template>
-  <van-nav-bar title="交流空間" left-arrow right-text="發文" @click-left="router.push('/')" @click-right="show = true" />
+  <van-nav-bar title="交流空間" right-text="＋ 發文" @click-right="show = true" />
   <van-empty v-if="!loading && !posts.length" description="還沒有貼文，來發第一篇吧" />
   <van-cell-group v-else inset style="margin-top:12px">
     <van-cell v-for="p in posts" :key="p.id" is-link @click="router.push({ name: 'post', params: { id: p.id } })">

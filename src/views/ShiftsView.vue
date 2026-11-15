@@ -87,7 +87,7 @@ async function submit() {
 </script>
 
 <template>
-  <van-nav-bar title="輪值表" left-arrow @click-left="router.push('/')" />
+  <van-nav-bar title="輪值表" left-arrow @click-left="router.push({ name: 'me' })" />
   <van-empty v-if="unavailable" description="資料庫還沒有套用輪值功能" />
   <van-empty v-else-if="!loading && !spots.length" description="成為任一個餵食點的照顧者，就可以排班與代班">
     <van-button round type="primary" size="small" @click="router.push('/')">回地圖找餵食點</van-button>
@@ -168,6 +168,6 @@ async function submit() {
 .spots { display: grid; gap: 10px; }
 .days { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
 .day { flex: none; padding: 6px 10px; border: 1px solid #dcdee0; border-radius: 16px; font-size: 13px; color: #333; }
-.day.on { background: #1989fa; border-color: #1989fa; color: #fff; }
+.day.on { background: var(--pl-green); border-color: var(--pl-green); color: #fff; }
 .note { background: #f7f8fa; border-radius: 8px; margin-top: 14px; }
 </style>
