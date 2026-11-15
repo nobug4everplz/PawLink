@@ -53,7 +53,7 @@ const when = (t) => new Date(t).toLocaleString('zh-TW', { month: 'numeric', day:
 </script>
 
 <template>
-  <van-nav-bar title="通知" left-arrow @click-left="router.push('/')" />
+  <van-nav-bar title="通知" />
   <van-tabs v-model:active="tab" sticky>
     <van-tab title="居民通報" name="reports" :badge="pending.filter((r) => r.status === 'open').length || ''">
     <van-empty v-if="!loading && !list.length" description="你照顧的餵食點目前沒有收到通報" />

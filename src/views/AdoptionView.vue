@@ -54,7 +54,7 @@ const fuLabel = (r, f) => {
 </script>
 
 <template>
-  <van-nav-bar title="領養陪伴" left-arrow @click-left="router.push('/')" />
+  <van-nav-bar title="領養陪伴" left-arrow @click-left="router.push({ name: 'me' })" />
   <van-empty v-if="unavailable" description="資料庫還沒有套用領養陪伴功能" />
   <van-empty v-else-if="!loading && !rows.length" description="目前沒有跟你有關的領養紀錄">
     <p class="how">領養了平台上的動物嗎？到牠的身分檔按「我領養了牠」，之後第 7、30、90 天會請你回報近況。</p>

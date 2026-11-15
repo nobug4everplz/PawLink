@@ -25,7 +25,7 @@ const back = () => (window.history.length > 1 ? router.back() : router.replace('
 <template>
   <van-nav-bar title="加入主畫面" left-arrow @click-left="back" />
   <div class="wrap">
-    <van-notice-bar v-if="standalone" :scrollable="false" left-icon="passed" color="#1f7a50" background="#e8f6ef">你已經是從主畫面開啟的了。</van-notice-bar>
+    <van-notice-bar v-if="standalone" :scrollable="false" left-icon="passed" color="#166544" background="#e6f3ec">你已經是從主畫面開啟的了。</van-notice-bar>
     <div class="hero">
       <img src="/pwa-192.png" alt="" width="72" height="72" />
       <p>加入主畫面後可以像 App 一樣全螢幕開啟。沒有網路時也能打開，餵食紀錄會先存在手機，恢復連線後自動補傳。</p>

@@ -2,13 +2,14 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import L, { loadCluster } from '../lib/leaflet'
-import { showToast, showConfirmDialog } from 'vant'
-import { auth, signOut, isAdmin } from '../lib/auth'
+import { showToast } from 'vant'
+import { auth } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
 import { net, flushQueue, onFlushed, refreshQueueCount } from '../lib/offlineQueue'
-import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones, getReportInbox, getAnimalAlerts, getShifts, getTnrTasks, getAdoptions } from '../lib/api'
+import { subscribeFeeding, getSpotSummary, getPendingCleanups, getZones } from '../lib/api'
 import { footprintIcon } from '../components/footprintIcon'
 import SpotPanel from '../components/SpotPanel.vue'
+import { refreshBadges } from '../lib/badges'
 
 const route = useRoute(), router = useRouter()
 const mapEl = ref(null)
@@ -21,10 +22,9 @@ let loadSeq = 0
 const showingCached = ref(false)
 const showInstall = ref(false)
 const zoneCount = ref(0)
-const myAdopt = ref(null) // null：沒有跟我有關的領養紀錄，不顯示入口；數字：待填問卷加上等我確認的登記
-const myTnr = ref(0) // 我認領的 TNR 任務裡，現在輪到我做的
-const needCover = ref(0) // 我照顧的點有別人在求代班的班數
-const openReports = ref(0) // 我照顧的點還沒處理的居民通報，加上還沒處理的動物提醒
+const filter = ref('all') // 地圖上方的篩選：all 或某一種腳印狀態
+const tally = ref({ all: 0, hungry: 0, recent: 0, fresh: 0 }) // 目前視窗內各狀態的餵食點數
+const FILTERS = [['all', '全部'], ['hungry', '久未餵食'], ['recent', '一陣子前'], ['fresh', '剛餵過']]
 let spots = []
 
 async function loadSpots() {
@@ -37,10 +37,14 @@ async function loadSpots() {
     showingCached.value = !!spots.offline
     cluster.clearLayers()
     for (const s of spots) {
-      const m = L.marker([s.lat, s.lng], { icon: footprintIcon(s.footprint) })
+      if (filter.value !== 'all' && s.footprint !== filter.value) continue
+      const m = L.marker([s.lat, s.lng], { icon: footprintIcon(s), title: s.name, alt: s.name })
       m.on('click', () => select(s.id))
       cluster.addLayer(m)
     }
+    const n = { all: spots.length, hungry: 0, recent: 0, fresh: 0 }
+    for (const s of spots) if (s.footprint in n) n[s.footprint]++
+    tally.value = n
   } catch (e) { showToast('載入餵食點失敗：' + e.message) }
 }
 /** 手動補傳離線紀錄 */
@@ -78,15 +82,9 @@ async function loadPending() {
   if (!auth.user) { pending.value = []; return }
   try { pending.value = await getPendingCleanups() } catch { /* 提醒載入失敗不影響地圖 */ }
 }
-async function loadInbox() {
-  if (!auth.user) { openReports.value = 0; needCover.value = 0; myTnr.value = 0; myAdopt.value = null; return }
-  const [reports, alerts] = await Promise.all([getReportInbox({ silent: true }), getAnimalAlerts({ silent: true })])
-  openReports.value = reports.filter((r) => r.status === 'open').length + alerts.filter((a) => a.status === 'open').length
-  needCover.value = (await getShifts({ silent: true })).filter((x) => x.can_claim).length
-  myTnr.value = (await getTnrTasks(null, { silent: true })).filter((t) => t.is_mine && t.is_ready).length
-  const ad = await getAdoptions(null, { silent: true })
-  myAdopt.value = ad.length ? ad.reduce((n, r) => n + (r.my_role === 'adopter' ? r.due_count : r.my_role === 'caretaker' ? 1 : 0), 0) : null
-}
+/** 通知、輪值、接力、領養的待辦數字改由底部分頁列顯示（見 lib/badges.js） */
+function loadInbox() { refreshBadges() }
+function setFilter(f) { filter.value = filter.value === f ? 'all' : f; loadSpots() }
 function onChanged() { loadSpots(); loadPending() }
 /** 點清理提醒：跳到最早一筆未清理的餵食點並開啟面板 */
 async function goPending() {
@@ -99,10 +97,6 @@ async function goPending() {
   select(p.spot_id)
 }
 
-async function logout() {
-  try { await showConfirmDialog({ title: '登出', message: net.count ? `還有 ${net.count} 筆餵食紀錄沒補傳，登出後要再登入同一個帳號才會補傳。確定要登出嗎？` : '確定要登出嗎？' }) } catch { return }
-  await signOut()
-}
 function locate() { map.locate({ setView: true, maxZoom: 17, enableHighAccuracy: true }) }
 
 function addSpotAt(latlng) {
@@ -124,7 +118,7 @@ onMounted(async () => {
 
   map.on('locationfound', (e) => {
     if (meMarker) meMarker.remove()
-    meMarker = L.circleMarker(e.latlng, { radius: 8, color: '#fff', weight: 3, fillColor: '#1989fa', fillOpacity: 1 }).addTo(map)
+    meMarker = L.circleMarker(e.latlng, { radius: 8, color: '#fff', weight: 3, fillColor: '#2f7de1', fillOpacity: 1 }).addTo(map)
   })
   map.on('locationerror', () => showToast('無法取得定位，請確認已允許位置權限（需 HTTPS）'))
   map.on('zoomend', zoneLabels)
@@ -166,46 +160,48 @@ watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
 <template>
   <div class="page">
     <div ref="mapEl" class="map" />
-    <van-notice-bar v-if="pending.length" class="pending" left-icon="brush-o" mode="link" :scrollable="false" @click="goPending">
-      你有 {{ pending.length }} 筆餵食還沒回報清理（{{ pending[0].spot_name }}）
-    </van-notice-bar>
-    <div class="top" :class="{ shifted: pending.length }">
-      <van-button v-if="!auth.user" size="small" round type="primary" @click="router.push('/login')">登入</van-button>
-      <van-button v-else size="small" round plain @click="logout">{{ auth.profile?.display_name || '已登入' }}・登出</van-button>
+
+    <div class="hud">
+      <div class="bar">
+        <img src="/pwa-192.png" alt="" width="34" height="34" />
+        <div class="ttl">
+          <b>PawLink</b>
+          <span>{{ tally.all ? `這一帶有 ${tally.all} 個餵食點` : '這一帶還沒有餵食點' }}</span>
+        </div>
+        <van-button v-if="!auth.user" size="small" round type="primary" @click="router.push('/login')">登入</van-button>
+        <button v-else type="button" class="me" :aria-label="`${auth.profile?.display_name || '已登入'}，開啟我的頁面`" @click="router.push({ name: 'me' })">{{ [...(auth.profile?.display_name || '我')][0] }}</button>
+      </div>
+      <div class="chips" role="group" aria-label="依餵食狀態篩選">
+        <button v-for="[k, label] in FILTERS" :key="k" type="button" class="chip" :class="[k, { on: filter === k }]" :aria-pressed="filter === k" @click="setFilter(k)">
+          <i v-if="k !== 'all'" />{{ label }}<em>{{ tally[k] }}</em>
+        </button>
+      </div>
+      <button v-if="pending.length" type="button" class="todo pending" @click="goPending">
+        <van-icon name="brush-o" />
+        <span>你有 {{ pending.length }} 筆餵食還沒回報清理（{{ pending[0].spot_name }}）</span>
+        <van-icon name="arrow" />
+      </button>
     </div>
-    <div class="links" :class="{ shifted: pending.length }">
-      <van-button size="small" round plain type="success" icon="flower-o" @click="router.push({ name: 'conservation' })">保育</van-button>
-      <van-button v-if="auth.user" size="small" round plain type="primary" icon="chat-o" @click="router.push({ name: 'community' })">交流</van-button>
-      <van-button v-if="isAdmin()" size="small" round plain type="danger" icon="setting-o" @click="router.push({ name: 'admin' })">後台</van-button>
+
+    <div class="dock">
+      <div class="notes">
+        <div v-if="showInstall" class="install">
+          <span @click="router.push({ name: 'install' })">📲 加入主畫面，像 App 一樣使用 ›</span>
+          <van-icon name="cross" aria-label="關閉" @click="dismissInstall" />
+        </div>
+        <div v-if="!net.online || net.count || showingCached" class="offline" @click="flushNow">
+          <van-icon :name="net.online ? 'upgrade' : 'warning-o'" />
+          <span v-if="net.count">{{ net.flushing ? '補傳中…' : `有 ${net.count} 筆餵食紀錄待補傳` }}{{ net.online ? '，點這裡立刻補傳' : '，恢復連線後自動補傳' }}</span>
+          <span v-else>目前離線，顯示上次載入的餵食點。仍可記錄餵食</span>
+        </div>
+        <div v-if="zoneCount" class="legend" @click="showAllZones"><i class="red" />保育熱區 {{ zoneCount }} 處<i class="yellow" />200 公尺警示帶<span class="all">看全部</span></div>
+      </div>
+      <div class="fabs">
+        <button type="button" class="fab" aria-label="定位到我的位置" @click="locate"><van-icon name="aim" /></button>
+        <button type="button" class="fab add" aria-label="新增餵食點" @click="addHere"><van-icon name="plus" /></button>
+      </div>
     </div>
-    <div v-if="auth.user" class="row2" :class="{ shifted: pending.length }">
-      <van-badge :content="openReports || ''" :show-zero="false" class="inbox">
-        <van-button size="small" round plain icon="envelop-o" @click="router.push({ name: 'inbox' })">通知</van-button>
-      </van-badge>
-      <van-badge :content="needCover || ''" :show-zero="false" class="shifts">
-        <van-button size="small" round plain icon="calendar-o" @click="router.push({ name: 'shifts' })">輪值</van-button>
-      </van-badge>
-      <van-badge :content="myTnr || ''" :show-zero="false" class="tnr">
-        <van-button size="small" round plain icon="exchange" @click="router.push({ name: 'tnr' })">接力</van-button>
-      </van-badge>
-      <van-badge v-if="myAdopt !== null" :content="myAdopt || ''" :show-zero="false" class="adopt">
-        <van-button size="small" round plain icon="like-o" @click="router.push({ name: 'adoptions' })">領養</van-button>
-      </van-badge>
-    </div>
-    <div v-if="!net.online || net.count || showingCached" class="offline" @click="flushNow">
-      <van-icon :name="net.online ? 'upgrade' : 'warning-o'" />
-      <span v-if="net.count">{{ net.flushing ? '補傳中…' : `有 ${net.count} 筆餵食紀錄待補傳` }}{{ net.online ? '，點這裡立刻補傳' : '，恢復連線後自動補傳' }}</span>
-      <span v-else>目前離線，顯示上次載入的餵食點。仍可記錄餵食</span>
-    </div>
-    <div v-if="showInstall" class="install">
-      <span @click="router.push({ name: 'install' })">📲 加入主畫面，像 App 一樣使用 ›</span>
-      <van-icon name="cross" @click="dismissInstall" />
-    </div>
-    <div v-if="zoneCount" class="legend" @click="showAllZones"><i class="red" />保育熱區 {{ zoneCount }} 處<i class="yellow" />200 公尺警示帶<span class="all">看全部</span></div>
-    <div class="fabs">
-      <van-button round icon="aim" type="primary" class="fab" @click="locate" />
-      <van-button round icon="plus" type="success" class="fab" @click="addHere" />
-    </div>
+
     <van-popup v-model:show="showPanel" position="bottom" round :overlay="false" closeable class="panel">
       <SpotPanel :spot-id="selectedId" :refresh-key="refreshKey" @changed="onChanged" />
     </van-popup>
@@ -213,24 +209,51 @@ watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
 </template>
 
 <style scoped>
-.page { position: relative; height: 100%; }
+.page { position: relative; height: calc(100vh - var(--pl-tabbar-h)); height: calc(100dvh - var(--pl-tabbar-h)); overflow: hidden; }
 .map { height: 100%; }
-.top { position: absolute; top: 12px; right: 12px; z-index: 1000; background: #fff; border-radius: 16px; }
-.top.shifted, .links.shifted { top: 52px; }
-.row2 { position: absolute; top: 52px; left: 12px; z-index: 1000; display: flex; gap: 8px; }
-.row2.shifted { top: 92px; }
-.row2 .van-button { background: #fff; }
-.links { position: absolute; top: 12px; left: 12px; z-index: 1000; display: flex; gap: 8px; }
-.links .van-button { background: #fff; }
-.offline { position: absolute; left: 12px; right: 76px; bottom: 64px; z-index: 1000; background: #323233; color: #fff; border-radius: 10px; padding: 8px 12px; font-size: 13px; display: flex; gap: 8px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.3); }
-.install { position: absolute; left: 12px; right: 76px; bottom: 112px; z-index: 1000; background: #fff; color: #1f7a50; border-radius: 10px; padding: 8px 12px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
-.legend { position: absolute; left: 12px; bottom: 28px; z-index: 1000; background: rgba(255,255,255,.92); border-radius: 8px; padding: 4px 10px; font-size: 12px; color: #444; display: flex; align-items: center; gap: 4px; }
-.legend { cursor: pointer; }
-.legend .all { margin-left: 6px; color: #1989fa; }
+
+/* 上方：品牌列、狀態篩選、清理提醒 */
+.hud { position: absolute; top: calc(10px + env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.bar { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, .97); border-radius: 18px; padding: 8px 10px 8px 8px; box-shadow: var(--pl-shadow-float); }
+.bar img { border-radius: 10px; flex: none; }
+.ttl { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.ttl b { font-size: 16px; letter-spacing: .02em; }
+.ttl span { font-size: 12px; color: var(--pl-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.me { flex: none; width: 36px; height: 36px; border-radius: 50%; border: 0; background: var(--pl-green); color: #fff; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 12px 2px; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; display: flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; border-radius: 16px; border: 1.5px solid transparent; background: rgba(255, 255, 255, .97); color: var(--pl-ink); font: inherit; font-size: 13px; font-weight: 600; box-shadow: 0 1px 4px rgba(31, 42, 36, .18); cursor: pointer; }
+.chip i { width: 10px; height: 10px; border-radius: 50%; background: var(--c); }
+.chip em { font-style: normal; color: var(--pl-muted); font-weight: 700; }
+.chip.hungry { --c: var(--pl-red); }
+.chip.recent { --c: var(--pl-amber); }
+.chip.fresh { --c: var(--pl-green); }
+.chip.on { background: var(--pl-ink); color: #fff; }
+.chip.on em { color: rgba(255, 255, 255, .75); }
+.todo { display: flex; align-items: center; gap: 8px; text-align: left; border: 0; border-radius: 14px; padding: 10px 12px; background: var(--pl-amber-soft); color: var(--pl-amber-ink); font: inherit; font-size: 13px; font-weight: 600; box-shadow: var(--pl-shadow-float); cursor: pointer; }
+.todo span { flex: 1; }
+.todo .van-icon { font-size: 16px; flex: none; }
+
+/* 下方：提示與圖例在左，定位與新增在右 */
+.dock { position: absolute; left: 12px; right: 12px; bottom: 22px; z-index: 1000; display: flex; align-items: flex-end; gap: 12px; pointer-events: none; }
+.dock > * { pointer-events: auto; }
+.notes { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.offline { background: var(--pl-ink); color: #fff; border-radius: 12px; padding: 9px 12px; font-size: 13px; line-height: 1.45; display: flex; gap: 8px; align-items: center; box-shadow: var(--pl-shadow-float); }
+.install { align-self: stretch; background: #fff; color: var(--pl-green-dark); font-weight: 600; border-radius: 12px; padding: 9px 12px; font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; box-shadow: var(--pl-shadow-float); }
+.legend { background: rgba(255, 255, 255, .95); border-radius: 10px; padding: 5px 10px; font-size: 12px; color: var(--pl-sub); display: flex; align-items: center; flex-wrap: wrap; gap: 4px; cursor: pointer; box-shadow: 0 1px 4px rgba(31, 42, 36, .18); }
+.legend .all { margin-left: 6px; color: var(--pl-green); font-weight: 600; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 4px; }
-.legend i.red { background: rgba(224,62,62,.45); border: 1px solid #e03e3e; }
-.legend i.yellow { background: rgba(242,183,5,.35); border: 1px dashed #d99a00; }
-.pending { position: absolute; top: 0; left: 0; right: 0; z-index: 1000; }
-.fabs { position: absolute; right: 16px; bottom: 32px; z-index: 1000; display: flex; flex-direction: column; gap: 12px; }
-.fab { width: 48px; height: 48px; }
+.legend i.red { background: rgba(217, 72, 47, .45); border: 1px solid var(--pl-red); }
+.legend i.yellow { background: rgba(242, 183, 5, .35); border: 1px dashed #d99a00; }
+.fabs { flex: none; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.fab { width: 48px; height: 48px; border-radius: 50%; border: 0; background: #fff; color: var(--pl-ink); font-size: 22px; display: flex; align-items: center; justify-content: center; box-shadow: var(--pl-shadow-float); cursor: pointer; }
+.fab.add { width: 58px; height: 58px; background: var(--pl-green); color: #fff; font-size: 26px; box-shadow: 0 4px 14px rgba(31, 132, 89, .45); }
+.fab:active { transform: scale(.95); }
+
+/* 寬螢幕：面板不要橫跨整個畫面 */
+@media (min-width: 700px) {
+  .panel { max-width: 440px; left: 16px; bottom: calc(16px + var(--pl-tabbar-h)); border-radius: 22px; }
+  .hud { max-width: 440px; }
+}
 </style>

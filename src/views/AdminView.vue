@@ -96,7 +96,7 @@ const day = (t) => new Date(t).toLocaleDateString('zh-TW')
 </script>
 
 <template>
-  <van-nav-bar title="管理後台" left-arrow @click-left="router.push('/')" />
+  <van-nav-bar title="管理後台" left-arrow @click-left="router.push({ name: 'me' })" />
   <van-tabs v-model:active="tab" sticky>
     <van-tab title="使用者" name="users">
       <van-search v-model="userQ" placeholder="搜尋暱稱或 Email" @search="loadUsers" @clear="loadUsers" />
