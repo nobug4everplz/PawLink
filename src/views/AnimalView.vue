@@ -115,7 +115,7 @@ async function addPhoto(it) {
         <template #value><span v-if="i + 1 === a.tnr_stage">目前</span><span v-else-if="canEdit" class="set">設為此階段</span></template>
       </van-cell>
     </van-cell-group>
-    <p v-if="canEdit" class="tip">點任一階段即可更新；「已手術」起會自動標記已結紮。</p>
+    <p v-if="canEdit" class="tip">點任一階段即可更新；「已手術」起會自動標記已結紮。每隻動物一天只能改一次，改之前請先確認。</p>
     <p v-else-if="auth.user" class="tip">只有建立者或該餵食點的照顧者可以更新進度。到餵食點面板按「成為照顧者」即可。</p>
     <p v-else class="tip">登入後，建立者或照顧者可以更新進度。</p>
     <template v-if="tnr">

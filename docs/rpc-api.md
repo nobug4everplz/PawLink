@@ -25,7 +25,7 @@
 | `create_feeding_spot` | 登入者 | `p_name, p_lat, p_lng, p_description?` | 新點 `uuid`（建立者自動成為 owner） | 建點表單 |
 | `check_recent_feeding` | 登入者 | `p_spot_id, p_hours = 2` | 0 或 1 列：`log_id, fed_at, fed_by_name, minutes_ago` | 按「記錄餵食」前提示「小明 35 分鐘前餵過」 |
 | `record_feeding` | 登入者 | `p_spot_id, p_food_type = 'dry', p_note?, p_fed_at?, p_client_id?` | 紀錄 `uuid` | 記錄餵食；離線補傳時帶 `p_client_id`（前端 `crypto.randomUUID()`）與 `p_fed_at`，重送不會重複 |
-| `report_cleanup` | 登入者 | `p_log_id` | `cleaned_at` | 清理回報按鈕 |
+| `report_cleanup` | 本人、該點照顧者、管理員 | `p_log_id` | `cleaned_at` | 清理回報按鈕。餵食紀錄不能直接修改，清理只能走這支（0013） |
 | `get_my_pending_cleanups` | 登入者 | 無 | `log_id, spot_id, spot_name, fed_at` | 開 App 時提醒「你在 X 點的餵食還沒回報清理」 |
 | `set_user_role` | 管理員 | `p_user_id, p_role ('user'/'admin')` | 無 | 階段二管理員後台 |
 
@@ -99,8 +99,8 @@ Turnstile 的設定步驟見 `docs/turnstile-setup.md`。
 | `open_tnr_case` | 建檔者、該動物出沒點的照顧者、管理員 | `p_animal_id, p_note?` | 案件 `uuid` | 身分檔「發起接力」。建立四個任務，已經走到的階段直接算完成 |
 | `cancel_tnr_case` | 發起人、可編輯這隻動物的人 | `p_case_id` | 無 | 取消接力（結紮階段不變） |
 | `claim_tnr_task` | 登入者 | `p_task_id` | 無 | 我來。只有第一位成功，其餘得到「已有人認領」 |
-| `unclaim_tnr_task` | 認領者 | `p_task_id` | 無 | 放棄，回到待認領 |
-| `complete_tnr_task` | 認領者 | `p_task_id, p_note?` | 更新後的 `tnr_stage` | 回報完成。前面的步驟要先完成；四步都完成時案件結案 |
+| `unclaim_tnr_task` | 認領者；發起人與這隻動物的照顧者也可解除別人的認領 | `p_task_id` | 無 | 放棄或解除認領，回到待認領 |
+| `complete_tnr_task` | 認領者 | `p_task_id, p_note?` | 更新後的 `tnr_stage` | 回報完成。前面的步驟要先完成；同一個人一天只能回報同一個案件的一個步驟（管理員不受限）；四步都完成時案件結案 |
 | `get_tnr_tasks` | 登入者 | `p_animal_id?` | `task_id, case_id, case_status, case_note, opener_name, animal_id, animal_name, spot_name, step_no, step, status, claimed_by, claimer_name, note, done_at, is_mine, is_ready, can_manage` | 帶動物：最近一個案件的四個任務；不帶：所有進行中案件（看板） |
 
 步驟 `step`：`trap` 誘捕、`vet` 送醫、`recovery` 術後照顧、`release` 放回，完成後 `animals.tnr_stage` 依序變成 2、3、4、5（只往前）。任務狀態：`open` 待認領、`claimed` 已認領、`done` 已完成。案件狀態：`open`、`done`、`cancelled`。

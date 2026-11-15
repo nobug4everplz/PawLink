@@ -17,6 +17,11 @@ async function run(fn, okMsg) {
 }
 const claim = (t) => run(() => claimTnrTask(t.task_id), `已認領「${TNR_STEP[t.step]}」`)
 const giveUp = (t) => run(() => unclaimTnrTask(t.task_id), '已放棄，任務回到待認領')
+/** 發起人或照顧者解除別人的認領（認領後沒有動靜時用） */
+async function release(t) {
+  try { await showConfirmDialog({ title: '解除認領', message: `把「${TNR_STEP[t.step]}」從 ${t.claimer_name || '認領者'} 手上收回，讓其他人可以接手？` }) } catch { return }
+  await run(() => unclaimTnrTask(t.task_id), '已解除，任務回到待認領')
+}
 async function done(t) {
   try { await showConfirmDialog({ title: `回報「${TNR_STEP[t.step]}」完成`, message: '結紮進度會跟著更新。' }) } catch { return }
   await run(() => completeTnrTask(t.task_id), t.step === 'release' ? '四步都完成了，謝謝大家' : '已回報完成，結紮進度已更新')
@@ -44,6 +49,7 @@ function hint(t) {
           <van-button size="small" round plain :disabled="busy" @click="giveUp(t)">放棄</van-button>
           <van-button v-if="t.is_ready" size="small" round type="success" :disabled="busy" @click="done(t)">完成</van-button>
         </template>
+        <van-button v-else-if="t.status === 'claimed' && c.can_manage" size="small" round plain :disabled="busy" @click="release(t)">解除認領</van-button>
       </template>
     </van-cell>
     <van-cell class="foot">

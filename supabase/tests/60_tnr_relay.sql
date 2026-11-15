@@ -130,6 +130,9 @@ select test.throws(format($$select public.open_tnr_case(%L)$$, test.id('tA')), '
 select public.claim_tnr_task(test.task('caseB', 'recovery'));
 update public.animals set tnr_stage = 5 where id = test.id('tB');
 select test.ok(public.complete_tnr_task(test.task('caseB', 'recovery')) = 5, '完成較前面的步驟不會把結紮階段往回調');
+select test.throws($$update public.animals set tnr_stage = 4 where id = test.id('tB')$$, '同一天第二次手動修改結紮階段被擋（0013）');
+-- 後面的測試需要階段 4：以資料庫擁有者身分調整（不受一天一次限制）
+reset role;
 update public.animals set tnr_stage = 4 where id = test.id('tB');
 
 -- =============================================================
