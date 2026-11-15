@@ -12,6 +12,8 @@ const name = computed(() => auth.profile?.display_name || '已登入')
 const initial = computed(() => [...name.value][0] || '🐾')
 onMounted(refreshBadges)
 
+const version = __APP_VERSION__
+
 async function logout() {
   try {
     await showConfirmDialog({
@@ -61,7 +63,7 @@ async function logout() {
       <van-cell title="加入主畫面" label="像 App 一樣開啟，沒有網路也能記錄餵食" icon="apps-o" is-link @click="router.push({ name: 'install' })" />
       <van-cell v-if="auth.user" title="登出" icon="revoke" class="out" clickable data-test="logout" @click="logout" />
     </van-cell-group>
-    <p class="foot">PawLink 流浪動物資訊共享與保育警示平台</p>
+    <p class="foot">PawLink 流浪動物資訊共享與保育警示平台<br><span data-test="version">版本 {{ version }}</span></p>
   </div>
 </template>
 
