@@ -25,6 +25,8 @@ export function reloadForUpdate(path) {
 }
 
 export function initUpdates() {
+  // 清掉舊的圖磚快取（裡面的不透明回應會讓地圖出現載不出來的空白區塊）
+  try { window.caches?.delete('osm-tiles') } catch { /* ignore */ }
   if (!('serviceWorker' in navigator)) return
   registerSW({
     immediate: true,
