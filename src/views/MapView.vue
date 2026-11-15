@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import L, { loadCluster } from '../lib/leaflet'
+import L, { loadCluster, baseLayer } from '../lib/leaflet'
 import { showToast } from 'vant'
 import { auth } from '../lib/auth'
 import { fetchMapSpots } from '../lib/spots'
@@ -19,6 +19,7 @@ const refreshKey = ref(0)
 const pending = ref([]) // 我還沒回報清理的餵食（餵食後 30 分鐘～24 小時）
 let map, cluster, meMarker, timer, rtTimer, unsub, pendingTimer, zoneLayer, zoneBounds, offFlushed
 let loadSeq = 0
+let fixSize = () => {}
 const showingCached = ref(false)
 const showInstall = ref(false)
 const zoneCount = ref(0)
@@ -110,7 +111,13 @@ onMounted(async () => {
   await loadCluster()
   if (!mapEl.value) return // 外掛載入期間已離開頁面
   map = L.map(mapEl.value, { zoomControl: false }).setView([25.0174, 121.5398], 15)
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, crossOrigin: true, attribution: '© OpenStreetMap contributors' }).addTo(map)
+  baseLayer().addTo(map)
+  // 容器大小在建立地圖後才定下來時（加入主畫面、轉向、從背景回來），要請 Leaflet 重新計算，否則會有一塊不載入圖磚
+  fixSize = () => map?.invalidateSize()
+  requestAnimationFrame(fixSize); setTimeout(fixSize, 600)
+  window.addEventListener('pageshow', fixSize); window.addEventListener('orientationchange', fixSize); document.addEventListener('visibilitychange', fixSize)
+  // iPhone：在地圖頁的按鈕區用兩指縮放會把整個頁面放大而且縮不回去；地圖本身的縮放不受影響
+  mapEl.value.parentElement.addEventListener('gesturestart', (e) => e.preventDefault())
   cluster = L.markerClusterGroup({ showCoverageOnHover: false, maxClusterRadius: 50 })
   map.addLayer(cluster)
   zoneLayer = L.layerGroup().addTo(map)
@@ -152,7 +159,9 @@ onMounted(async () => {
   pendingTimer = setInterval(() => { loadPending(); loadInbox() }, 5 * 60e3)
 })
 function dismissInstall() { showInstall.value = false; try { localStorage.setItem('pawlink:install-tip', '1') } catch { /* ignore */ } }
-onBeforeUnmount(() => { unsub?.(); offFlushed?.(); clearInterval(pendingTimer); clearTimeout(timer); clearTimeout(rtTimer); map?.remove(); map = null })
+onBeforeUnmount(() => {
+  window.removeEventListener('pageshow', fixSize); window.removeEventListener('orientationchange', fixSize); document.removeEventListener('visibilitychange', fixSize)
+  unsub?.(); offFlushed?.(); clearInterval(pendingTimer); clearTimeout(timer); clearTimeout(rtTimer); map?.remove(); map = null })
 watch(() => auth.user?.id, () => { if (map) { loadSpots(); loadPending(); loadInbox(); refreshQueueCount().then(() => flushQueue()) } })
 watch(() => net.online, (on) => { if (on && map) { loadSpots(); loadZones() } })
 </script>

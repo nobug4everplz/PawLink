@@ -46,7 +46,8 @@ export default defineConfig({
             urlPattern: /^https:\/\/tile\.openstreetmap\.org\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'osm-tiles',
+              // 名稱帶版本：舊的 osm-tiles 裡有改成 CORS 之前存的不透明回應，拿來回應 CORS 請求會讓圖磚載入失敗
+              cacheName: 'osm-tiles-v2',
               expiration: { maxEntries: 400, maxAgeSeconds: 7 * 24 * 3600 },
               // 圖磚以 CORS 載入（tileLayer 的 crossOrigin），只快取看得到狀態的回應；
               // 不透明回應在 Chrome 每筆會以數 MB 計入配額，會擠壓離線紀錄的空間
