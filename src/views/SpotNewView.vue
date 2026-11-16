@@ -10,11 +10,12 @@ const route = useRoute(), router = useRouter()
 const lat = ref(parseFloat(route.query.lat)), lng = ref(parseFloat(route.query.lng))
 const name = ref(''), description = ref('')
 const nearby = ref([]), busy = ref(false), alert = ref(null)
+let nearbyReady = Promise.resolve()
 
 onMounted(async () => {
   if (Number.isNaN(lat.value) || Number.isNaN(lng.value)) return router.replace('/')
   checkAlert(lat.value, lng.value).then((a) => { alert.value = a })
-  try { nearby.value = await findNearbySpots(lat.value, lng.value) } catch (e) { showToast(e.message) }
+  nearbyReady = findNearbySpots(lat.value, lng.value).then((r) => { nearby.value = r }).catch((e) => showToast(e.message))
 })
 
 async function join(s) {
@@ -22,11 +23,17 @@ async function join(s) {
   catch (e) { showToast(e.message) }
 }
 async function submit() {
+  if (busy.value) return
+  busy.value = true
+  try { await doSubmit() } finally { busy.value = false }
+}
+async function doSubmit() {
+  // 送出前等附近點查完、警示再查一次，避免頁面剛開就按送出而略過提醒（#28）
+  const [, a] = await Promise.all([nearbyReady, checkAlert(lat.value, lng.value)])
+  alert.value = a || alert.value
   if (nearby.value.length) {
     try { await showConfirmDialog({ title: '附近已有餵食點', message: '30 公尺內已有餵食點，確定仍要新增一個嗎？' }) } catch { return }
   }
-  // 送出前再查一次，避免警示還沒載入就按了送出
-  alert.value = (await checkAlert(lat.value, lng.value)) || alert.value
   const lv = alert.value?.level
   if (lv === 'red' || lv === 'yellow') {
     try {
@@ -35,11 +42,10 @@ async function submit() {
         : { title: '鄰近保育熱區', message: `此處距離保育熱區「${alert.value.zone_name}」約 ${Math.round(alert.value.distance_m)} 公尺。請餵完就清理、不要留食物過夜。要繼續建立嗎？`, confirmButtonText: '繼續建立' })
     } catch { return }
   }
-  busy.value = true
   try {
     const id = await createSpot(name.value, lat.value, lng.value, description.value)
     router.replace({ name: 'map', query: { spot: id } })
-  } catch (e) { showToast(e.message) } finally { busy.value = false }
+  } catch (e) { showToast(e.message) }
 }
 </script>
 
