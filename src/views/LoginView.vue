@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { showToast, showDialog } from 'vant'
-import { signIn, signUp } from '../lib/auth'
+import { signIn, signUp, authErrorText } from '../lib/auth'
 
 const route = useRoute(), router = useRouter()
 const mode = ref('login')
@@ -20,7 +20,7 @@ async function submit() {
     }
     router.replace(route.query.redirect || '/')
   } catch (e) {
-    showToast(e.message || '失敗')
+    showToast(/[\u4e00-\u9fff]/.test(e?.message || '') ? e.message : authErrorText(e))
   } finally { busy.value = false }
 }
 </script>

@@ -103,7 +103,8 @@ async function submit() {
 </template>
 
 <style scoped>
-.page { height: 100%; display: flex; flex-direction: column; position: relative; }
+/* 外框 .shell 只有 min-height，height:100% 會算成 0，地圖就不見了（#26），所以直接用視窗高度 */
+.page { height: 100vh; height: 100dvh; display: flex; flex-direction: column; position: relative; }
 .map { flex: 1; min-height: 0; }
 .hint { position: absolute; top: 56px; left: 56px; right: 12px; z-index: 1000; background: rgba(255,255,255,.94); border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #333; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
 .actions { position: absolute; left: 0; right: 0; bottom: 28px; z-index: 1000; display: flex; gap: 12px; justify-content: center; }
